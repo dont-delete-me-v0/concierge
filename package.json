@@ -1,0 +1,34 @@
+{
+  "name": "concierge",
+  "version": "1.0.0",
+  "description": "Concierge monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=apps/web-crawler",
+    "dev": "npm run dev --workspace=apps/web-crawler",
+    "lint": "npm run lint --workspace=apps/web-crawler",
+    "format": "prettier --write \"**/*.{js,ts,tsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{js,ts,tsx,json,md}\"",
+    "clean": "npm run clean --workspace=apps/web-crawler",
+    "test": "npm run test --workspace=apps/web-crawler"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.45.0",
+    "@typescript-eslint/parser": "^8.45.0",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "packageManager": "npm@10.2.4"
+}

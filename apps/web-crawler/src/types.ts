@@ -1,0 +1,223 @@
+export type PaginationType =
+  | 'infinite-scroll'
+  | 'load-more'
+  | 'next-button'
+  | 'none';
+
+export type ExtractType = 'text' | 'attribute' | 'html';
+
+export type TransformType = 'trim' | 'lowercase' | 'uppercase';
+
+export interface SelectorConfig {
+  name: string;
+  selector: string;
+  type: ExtractType;
+  attribute?: string;
+  multiple?: boolean;
+  transform?: TransformType;
+}
+
+export interface BasePaginationConfig {
+  type: PaginationType;
+  maxPages?: number;
+  waitAfterAction?: number;
+  scrollDelay?: number;
+  selector?: string;
+}
+
+export interface ScraperConfig {
+  url: string;
+  waitFor: string | string[];
+  pagination?: BasePaginationConfig;
+  selectors: SelectorConfig[];
+  outputFile?: string;
+  timeoutMs?: number;
+  headless?: boolean;
+  proxyServer?: string;
+  retries?: number;
+}
+
+export interface ExtractedRow {
+  [key: string]: string | undefined;
+}
+
+export interface ValidationSuccess {
+  ok: true;
+  config: ScraperConfig;
+}
+
+export interface ValidationFailure {
+  ok: false;
+  errors: string[];
+}
+
+export type ValidationResult = ValidationSuccess | ValidationFailure;
+
+export function validateConfig(input: unknown): ValidationResult {
+  const errors: string[] = [];
+  if (typeof input !== 'object' || input === null) {
+    errors.push('Config must be an object');
+    return { ok: false, errors };
+  }
+  const obj = input as Record<string, unknown>;
+
+  if (typeof obj.url !== 'string' || obj.url.length === 0) {
+    errors.push('"url" must be a non-empty string');
+  }
+  const waitFor = obj.waitFor as unknown;
+  if (
+    !(typeof waitFor === 'string' && waitFor.length > 0) &&
+    !(
+      Array.isArray(waitFor) &&
+      waitFor.length > 0 &&
+      waitFor.every(v => typeof v === 'string' && v.length > 0)
+    )
+  ) {
+    errors.push(
+      '"waitFor" must be a non-empty string or array of non-empty strings'
+    );
+  }
+
+  const selectors = obj.selectors as unknown;
+  if (!Array.isArray(selectors) || selectors.length === 0) {
+    errors.push('"selectors" must be a non-empty array');
+  } else {
+    for (let i = 0; i < selectors.length; i++) {
+      const s = selectors[i] as Record<string, unknown>;
+      if (typeof s !== 'object' || s === null) {
+        errors.push(`selectors[${i}] must be an object`);
+        continue;
+      }
+      if (typeof s.name !== 'string' || s.name.length === 0) {
+        errors.push(`selectors[${i}].name must be a non-empty string`);
+      }
+      if (typeof s.selector !== 'string' || s.selector.length === 0) {
+        errors.push(`selectors[${i}].selector must be a non-empty string`);
+      }
+      if (s.type !== 'text' && s.type !== 'attribute' && s.type !== 'html') {
+        errors.push(
+          `selectors[${i}].type must be one of: text | attribute | html`
+        );
+      }
+      if (
+        s.type === 'attribute' &&
+        (typeof s.attribute !== 'string' || s.attribute.length === 0)
+      ) {
+        errors.push(
+          `selectors[${i}].attribute must be provided when type = "attribute"`
+        );
+      }
+      if (
+        s.transform !== undefined &&
+        s.transform !== 'trim' &&
+        s.transform !== 'lowercase' &&
+        s.transform !== 'uppercase'
+      ) {
+        errors.push(
+          `selectors[${i}].transform must be one of: trim | lowercase | uppercase`
+        );
+      }
+    }
+  }
+
+  if (obj.pagination !== undefined) {
+    const p = obj.pagination as Record<string, unknown>;
+    if (typeof p !== 'object' || p === null) {
+      errors.push('"pagination" must be an object when provided');
+    } else {
+      const t = p.type as unknown;
+      if (
+        t !== 'infinite-scroll' &&
+        t !== 'load-more' &&
+        t !== 'next-button' &&
+        t !== 'none'
+      ) {
+        errors.push(
+          'pagination.type must be one of: infinite-scroll | load-more | next-button | none'
+        );
+      }
+      if (
+        (t === 'load-more' || t === 'next-button') &&
+        (typeof p.selector !== 'string' || p.selector.length === 0)
+      ) {
+        errors.push(
+          'pagination.selector must be provided for load-more or next-button'
+        );
+      }
+      if (
+        p.maxPages !== undefined &&
+        (typeof p.maxPages !== 'number' ||
+          !Number.isFinite(p.maxPages) ||
+          p.maxPages < 0)
+      ) {
+        errors.push(
+          'pagination.maxPages must be a non-negative number when provided (omit for unlimited)'
+        );
+      }
+      if (
+        p.scrollDelay !== undefined &&
+        (typeof p.scrollDelay !== 'number' || p.scrollDelay < 0)
+      ) {
+        errors.push(
+          'pagination.scrollDelay must be a non-negative number when provided'
+        );
+      }
+      if (
+        p.waitAfterAction !== undefined &&
+        (typeof p.waitAfterAction !== 'number' || p.waitAfterAction < 0)
+      ) {
+        errors.push(
+          'pagination.waitAfterAction must be a non-negative number when provided'
+        );
+      }
+    }
+  }
+
+  if (
+    obj.outputFile !== undefined &&
+    (typeof obj.outputFile !== 'string' || obj.outputFile.length === 0)
+  ) {
+    errors.push('"outputFile" must be a non-empty string when provided');
+  }
+  if (
+    obj.timeoutMs !== undefined &&
+    (typeof obj.timeoutMs !== 'number' || obj.timeoutMs <= 0)
+  ) {
+    errors.push('"timeoutMs" must be a positive number when provided');
+  }
+  if (obj.headless !== undefined && typeof obj.headless !== 'boolean') {
+    errors.push('"headless" must be a boolean when provided');
+  }
+  if (
+    obj.proxyServer !== undefined &&
+    (typeof obj.proxyServer !== 'string' || obj.proxyServer.length === 0)
+  ) {
+    errors.push('"proxyServer" must be a non-empty string when provided');
+  }
+  if (
+    obj.retries !== undefined &&
+    (typeof obj.retries !== 'number' || obj.retries < 0)
+  ) {
+    errors.push('"retries" must be a non-negative number when provided');
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  const normalized: ScraperConfig = {
+    url: obj.url as string,
+    waitFor: (Array.isArray(waitFor) ? waitFor : (waitFor as string)) as
+      | string
+      | string[],
+    pagination: obj.pagination as BasePaginationConfig | undefined,
+    selectors: selectors as SelectorConfig[],
+    outputFile: (obj.outputFile as string | undefined) ?? 'results.json',
+    timeoutMs: (obj.timeoutMs as number | undefined) ?? 30000,
+    headless: (obj.headless as boolean | undefined) ?? true,
+    proxyServer: obj.proxyServer as string | undefined,
+    retries: (obj.retries as number | undefined) ?? 0,
+  };
+
+  return { ok: true, config: normalized };
+}

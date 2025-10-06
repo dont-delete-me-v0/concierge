@@ -1,0 +1,19 @@
+{
+  "name": "@concierge/prettier-config",
+  "version": "1.0.0",
+  "description": "Shared prettier configuration for concierge monorepo",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "keywords": [
+    "prettier",
+    "config"
+  ],
+  "author": "",
+  "license": "ISC",
+  "peerDependencies": {
+    "prettier": "^3.0.0"
+  }
+}

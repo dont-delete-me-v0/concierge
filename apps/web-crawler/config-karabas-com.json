@@ -1,0 +1,36 @@
+{
+  "url": "https://karabas.com/concerts",
+  "waitFor": [".result-event"],
+  "pagination": {
+    "type": "load-more",
+    "selector": ".show-more a"
+  },
+  "selectors": [
+    {
+      "name": "title",
+      "selector": ".section-title-h3",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "price",
+      "selector": ".ev-buy .center_col span strong",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "dateTime",
+      "selector": ".date-time",
+      "type": "attribute",
+      "attribute": "data-event-time",
+      "multiple": true,
+      "transform": "trim"
+    }
+  ],
+  "outputFile": "products.json",
+  "timeoutMs": 30000,
+  "headless": false,
+  "retries": 1
+}

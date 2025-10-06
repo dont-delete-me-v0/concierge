@@ -1,0 +1,70 @@
+{
+  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-24",
+  "waitFor": [".event-card", ".item-card"],
+  "pagination": {
+    "type": "infinite-scroll",
+    "scrollDelay": 3000 
+  },
+  "selectors": [
+    {
+      "name": "title",
+      "selector": ".item-card-title",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "price",
+      "selector": ".event__price",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "link",
+      "selector": ".item-card",
+      "type": "attribute",
+      "attribute": "href",
+      "multiple": true
+    },
+    {
+      "name": "title",
+      "selector": ".item-card-title",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "price",
+      "selector": ".item-card .fs-16",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "eventId",
+      "selector": ".item-card",
+      "type": "attribute",
+      "attribute": "data-id",
+      "multiple": true
+    },
+    {
+      "name": "dateTime",
+      "selector": ".item-card .fw-900.fs-14",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "venue",
+      "selector": ".item-card .color-secondary.fs-14",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    }
+  ],
+  "outputFile": "products.json",
+  "timeoutMs": 30000,
+  "headless": false,
+  "retries": 1
+}
