@@ -35,6 +35,7 @@ export interface ScraperConfig {
   headless?: boolean;
   proxyServer?: string;
   retries?: number;
+  incremental?: IncrementalConfig;
 }
 
 export interface ExtractedRow {
@@ -52,6 +53,30 @@ export interface ValidationFailure {
 }
 
 export type ValidationResult = ValidationSuccess | ValidationFailure;
+
+export interface IncrementalConfig {
+  enabled: boolean;
+  uniqueKey?: string[];
+  storageFile?: string;
+  stopOnMatch?: boolean;
+  trackChanges?: boolean;
+  updateExisting?: boolean;
+}
+
+export interface ChangeRecord {
+  timestamp: string;
+  field: string;
+  oldValue: string | undefined;
+  newValue: string | undefined;
+}
+
+export interface IncrementalState {
+  lastUpdate: string;
+  totalItems: number;
+  hashes: string[];
+  // Present when trackChanges/updateExisting is enabled
+  items?: Record<string, ExtractedRow & { changes?: ChangeRecord[] }>;
+}
 
 export function validateConfig(input: unknown): ValidationResult {
   const errors: string[] = [];
@@ -173,6 +198,71 @@ export function validateConfig(input: unknown): ValidationResult {
     }
   }
 
+  // incremental validation
+  const outputFileInput =
+    (obj.outputFile as string | undefined) ?? 'results.json';
+  const defaultStorageFile = outputFileInput.endsWith('.json')
+    ? outputFileInput.replace(/\.json$/i, '-state.json')
+    : `${outputFileInput}-state.json`;
+
+  const inc = obj.incremental as Record<string, unknown> | undefined;
+  if (inc !== undefined && (typeof inc !== 'object' || inc === null)) {
+    errors.push('"incremental" must be an object when provided');
+  }
+
+  const enabledInc = Boolean(
+    inc && typeof inc.enabled === 'boolean' ? (inc.enabled as boolean) : false
+  );
+
+  if (enabledInc) {
+    const uniqueKey = inc?.uniqueKey as unknown;
+    if (!Array.isArray(uniqueKey) || uniqueKey.length === 0) {
+      errors.push(
+        'incremental.uniqueKey must be a non-empty array when enabled'
+      );
+    } else {
+      const selectorNames = new Set(
+        ((obj.selectors as unknown as SelectorConfig[]) || []).map(s => s.name)
+      );
+      for (let i = 0; i < uniqueKey.length; i++) {
+        const k = uniqueKey[i];
+        if (typeof k !== 'string' || k.length === 0) {
+          errors.push(`incremental.uniqueKey[${i}] must be a non-empty string`);
+        } else if (!selectorNames.has(k)) {
+          errors.push(
+            `incremental.uniqueKey[${i}] refers to unknown selector name: ${k}`
+          );
+        }
+      }
+    }
+    if (
+      inc?.storageFile !== undefined &&
+      (typeof inc.storageFile !== 'string' || inc.storageFile.length === 0)
+    ) {
+      errors.push(
+        'incremental.storageFile must be a non-empty string when provided'
+      );
+    }
+    if (
+      inc?.stopOnMatch !== undefined &&
+      typeof inc.stopOnMatch !== 'boolean'
+    ) {
+      errors.push('incremental.stopOnMatch must be a boolean when provided');
+    }
+    if (
+      inc?.trackChanges !== undefined &&
+      typeof inc.trackChanges !== 'boolean'
+    ) {
+      errors.push('incremental.trackChanges must be a boolean when provided');
+    }
+    if (
+      inc?.updateExisting !== undefined &&
+      typeof inc.updateExisting !== 'boolean'
+    ) {
+      errors.push('incremental.updateExisting must be a boolean when provided');
+    }
+  }
+
   if (
     obj.outputFile !== undefined &&
     (typeof obj.outputFile !== 'string' || obj.outputFile.length === 0)
@@ -217,6 +307,15 @@ export function validateConfig(input: unknown): ValidationResult {
     headless: (obj.headless as boolean | undefined) ?? true,
     proxyServer: obj.proxyServer as string | undefined,
     retries: (obj.retries as number | undefined) ?? 0,
+    incremental: {
+      enabled: enabledInc,
+      uniqueKey: (inc?.uniqueKey as string[] | undefined) ?? undefined,
+      storageFile:
+        (inc?.storageFile as string | undefined) ?? defaultStorageFile,
+      stopOnMatch: (inc?.stopOnMatch as boolean | undefined) ?? true,
+      trackChanges: (inc?.trackChanges as boolean | undefined) ?? false,
+      updateExisting: (inc?.updateExisting as boolean | undefined) ?? false,
+    },
   };
 
   return { ok: true, config: normalized };

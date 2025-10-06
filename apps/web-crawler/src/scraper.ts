@@ -5,6 +5,7 @@ import {
   type LaunchOptions,
   type Page,
 } from 'playwright';
+import { computeRowHash } from './incremental.js';
 import { PaginationHandler } from './pagination.js';
 import type { ExtractedRow, ScraperConfig } from './types.js';
 
@@ -65,7 +66,7 @@ export class ConfigurableScraper {
     );
   }
 
-  async scrape(): Promise<ExtractedRow[]> {
+  async scrape(_existingHashes?: Set<string>): Promise<ExtractedRow[]> {
     if (!this.page) throw new Error('Page not initialized');
     await this.navigate();
 

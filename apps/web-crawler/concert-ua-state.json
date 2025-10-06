@@ -1,0 +1,575 @@
+{
+  "lastUpdate": "2025-10-06T23:28:23.923Z",
+  "totalItems": 63,
+  "hashes": [
+    "53a5d3ae69d79b38b1b7af665912b07653d09addbdac477bbe3928de4373ffee",
+    "0a6a43f66ad147bcff2739e2c06215b4cd5cf72979bd278e8b2589cf2add18dc",
+    "8c07d2ba33c21686d2692df6f699b5963e1f20153f91522c507ecafdabb11b3f",
+    "07474ed51441bde0d1259cac3e24ac037e89a60221880a16b97e34dc979fc461",
+    "39421b32cb2e59d7967522a83de07e09aefabb881865d125c4e3b5772bc36c26",
+    "442701f8af05d2dbeea4e7629dbfec4ec0d389f5d98383c3c8f5fea9bfa9839a",
+    "c31b378d364881f28b686dabf30dfc041e869e427900529dfc706c670e9075cc",
+    "2cf0f07d292b34375090c600eee5693e65adeb451024f76bb29919122b1c0207",
+    "1ba231b7a771393c3efcfb3ac049582490703cfc666106c7be128011b93963ef",
+    "e3e55799b61528ce5809b5130442741fce6a76c57ce05920f539bc0274894108",
+    "efa9080c94dd182b6bcbe9df4012938a4647d55f71ea45205642ca3cbb45f1a3",
+    "8f027177af67a914666c76ca3d2e0001f3768ce2cdc9cbce1a5bc464ac69027d",
+    "7304d07b671ad38758e3794c02c0a1f33483352e0eba9cac75a1cff2cc2e9418",
+    "4704734d0569fb9d6c7e2474b50ab73767fa0d2fb5a890f615696e63659295e8",
+    "f773058a131016d24eb5bca7b991b3860a98e2373017f1866a87fad164cb084a",
+    "8549cf65330a373145995448fbda5875810b29889c2c50e6b07ca3a6e06cbb3e",
+    "f10dbcbcd30752040538f554c5a6cba72d4a5d49ccf8e57d7f4654740f4b62fd",
+    "7c9cd7ec881cecf3827bdf640494569ff7a37f91f24e53508228305c836a06b0",
+    "ae2c613b027921c9ce5ef5b0debc7138953d4c0068ec52a6113a048229d4c745",
+    "a8281289587af2162c1dc14413ad917db73fd2c9a51c0707238e1ace332f6ace",
+    "a09d3d418abb7167e1be147de001a00fbb6f990468f8d4dee073c1c104ccecb2",
+    "373206d4533b8f79a8b63a762f29677751f14a1c0c094ce74288ff6ac4e5bfad",
+    "eb05c443b0e1cbdb56e9ffb889e0b87904264a0ec59d93e829e0a1330a1f4452",
+    "f1fa3006f68ca50c16c415aeffefb66b951f6f9d3d7d49918a5a38bbf14f282e",
+    "928ad7fe4e7b5fe6f37e9e7a9b5629fd8ba60558cbc950fbd7fa511dfa56f6ff",
+    "529c15b4e8c45ab6c27740a1a8a50f3f8bfef5241c850c161e90295eb0e4dd4a",
+    "04681eb544917dd345ebaeb17116affdd7f23055b4ada36d157866cea65cb361",
+    "8e60edc6b872bf043b13827041c558e5469b58e1397ade5165e7ebd62d04c059",
+    "e27d1eeaf032d80f3c1b4e2f58703a5615fe90d293544dc57815f290bb7814e0",
+    "633a7424096780a4966b45ec4f5392120634caac5c65106d1226cb7aa5008a2d",
+    "25587e2cd48746e5e7303a642591d13b0d384c72ff21afbb613c536f24e7352c",
+    "f315ae8ff5a3b98ed17806bcf6e45190fbad6c08e2fb452891c1e61e134769ee",
+    "eba4a67e0d97486813d5646ecdfb6ea46bd28da4a7a3d8c2fd4f086c095192a5",
+    "de8b0d84ea55cf18bfd28168db766ae7fc9b5479d27e5f772a7b6292fb8b6d43",
+    "e2424124d49ee1185d89f7d5ef7f555232ef84f8a37b9e3935fe0584d709bcd2",
+    "ad643d05e44be411466c9f5abbb90ce33644011f26d5a458664b90a58ba6b1c9",
+    "3a1a5e43f813a820b6c49b13b544193b6d267fb77b6d32d35a28254967880e55",
+    "d0f7e4a3ac2f70dce0dadf328476a15b55b28543cb893a350af672608fafe888",
+    "48eac3f0483a41b4ebb7a50bd203f56b1b1268ee600f7da9af67369893a425d0",
+    "ff3f00f1ee445eb599ec5dd9cb6daa541198a279a9513dcce139815ea5f3a3a0",
+    "30a01ca899aad3ab69f2f6283b5aec0906598e33e6ca1f41f3b5d36f58e7c429",
+    "e9f6472113e428adae54ea6e95c4ca0a53fc2a9aafeee6fd2e85804adafc6f0f",
+    "e36d7397ba48101fb77cdb0023c7aaea8f5527bb9fb6d5dfc1d60d1448f33a97",
+    "3767a96f2eb28e9e41db8c51f1ba011522414a0941d3a59c49bfa14367b499fc",
+    "f9e4818cacb37a78ccb2c60655adc95dee60422c79e34d938578df30dc649019",
+    "1ea2156a3f3c963a275ad6afb57c7f162acaba7c49fa98910999ab9a7f3bcff9",
+    "51d69d0247e21d67ce5b18b20f274c850a75eae1a7d3cd560a69baf2bcaf5953",
+    "44b2063bbfe079d8437d601a0f05f31f9ca152d43f798f35af565b994a4bfed1",
+    "a6df0bbb8b99c7207b646eb6ecb79db06aa80d287448620d731addd2bd4d420d",
+    "dd8105c3698cc49495f391316ff5bebd49fc899ab26587efb8643aabc4b821d6",
+    "74f349920056d63885163e7b853dc2407fcb1bfff8eb88277e1b87086ec4fcf2",
+    "4c564fa62c96af037ae467bc0f749d7011f5a38670f13e534752b51282e2ea76",
+    "984c6f3015e52cabdc5541b5ef577d1fdbe29c88b9afdb8acf9ce37f1940a701",
+    "d5c9f3bf6f6e1233199ee43a3a87984e2561a44a494c09a54f5d740fc3ad77f8",
+    "af5f3d8dd7356ac12105813fb39328a493e5f06a3544b51d71f6b4bec0e935d0",
+    "dd9108e9d56cfed847377760416fb9750d89a1df1fd9bb1cec657f4d1c7252be",
+    "32ada8c54407fe37ca5cec0083ea51a4b2c59aa7c7f94dd2b1c135d71a7d0484",
+    "ad3ef97c4dd449ebb56d6e183811eaec0c5347685a3490197994239c04c7c3e3",
+    "64e7dbe0a651e0ae2448d884be2e02766981b92b1dbcdbf2149a6d366d6c8d55",
+    "a9a33e1959ef28feea744d25c1dbaab82a6e585406f90e3450b4433114e97e7f",
+    "cf6bcd5a715af72a4b4ac7e0c95da4c7b0a347a84b06976ebcf0f118d89dee92",
+    "a281885fd1fa7d2676b19b985f46d60f8e807418f7b6113cce247bfdce851081",
+    "1f1a352f8812adcbbfd25aaf206f0ac6fe6ed2223f5fd4c806e1492a81496911"
+  ],
+  "items": {
+    "53a5d3ae69d79b38b1b7af665912b07653d09addbdac477bbe3928de4373ffee": {
+      "title": "Хор Григорія Верьовки. Великий ювілейний концерт",
+      "price": "від 400 ₴",
+      "link": "https://concert.ua/uk/event/hor-im-verovki?sc_content=26399_r1480v1881",
+      "eventId": "262289",
+      "dateTime": "18 жовтня 18:00, сб",
+      "venue": "Київ, Палац Україна"
+    },
+    "0a6a43f66ad147bcff2739e2c06215b4cd5cf72979bd278e8b2589cf2add18dc": {
+      "title": "Олег Скрипка та оркестр НАОНІ. Різдвяний концерт Щедрик",
+      "price": "від 450 ₴",
+      "link": "https://concert.ua/uk/event/oleg-skripka-ta-orkestr-naoni?sc_content=26399_r1480v1881",
+      "eventId": "274386",
+      "dateTime": "7 січня 18:00, ср",
+      "venue": "Київ, МЦКМ (Жовтневий палац)"
+    },
+    "8c07d2ba33c21686d2692df6f699b5963e1f20153f91522c507ecafdabb11b3f": {
+      "title": "МУР. Премія імені Павла Тичини – Гранд-фінал",
+      "price": "від 500 ₴",
+      "link": "https://concert.ua/uk/event/mur-premija?sc_content=26399_r1480v1881",
+      "eventId": "267537",
+      "dateTime": "1 листопада 11:00, сб",
+      "venue": "Київ, UNIT.Сity"
+    },
+    "07474ed51441bde0d1259cac3e24ac037e89a60221880a16b97e34dc979fc461": {
+      "title": "Шоу 8 ЦИЦЬОК: Волкова, Ткаченко, Netremba, Воскобойник",
+      "price": "від 490 ₴",
+      "link": "https://concert.ua/uk/event/shou-8-tsitsok?sc_content=26399_r1480v1881",
+      "eventId": "271158",
+      "dateTime": "17 жовтня 19:00, пт",
+      "venue": "Київ, Центр культури та мистецтва НАУ"
+    },
+    "39421b32cb2e59d7967522a83de07e09aefabb881865d125c4e3b5772bc36c26": {
+      "title": "Хамерман Знищує Віруси \"Новорічне свято\" - Київ",
+      "price": "від 690 ₴",
+      "link": "https://concert.ua/uk/event/hamerman-znishuye-virusi-novorichne-svjato-kiyiv?sc_content=26399_r1480v1881",
+      "eventId": "275068",
+      "dateTime": "20 грудня 19:00, сб",
+      "venue": "Київ, ATLAS"
+    },
+    "442701f8af05d2dbeea4e7629dbfec4ec0d389f5d98383c3c8f5fea9bfa9839a": {
+      "title": "Zwyntar",
+      "price": "від 790 ₴",
+      "link": "https://concert.ua/uk/event/zwyntar?sc_content=26399_r1480v1881",
+      "eventId": "270927",
+      "dateTime": "31 жовтня 19:00, пт",
+      "venue": "Київ, Stereo Plaza"
+    },
+    "c31b378d364881f28b686dabf30dfc041e869e427900529dfc706c670e9075cc": {
+      "title": "Різдвяні історії",
+      "price": "від 300 ₴",
+      "link": "https://concert.ua/uk/event/rizdvjani-fantaziyi?sc_content=26399_r1480v1881",
+      "eventId": "274327",
+      "dateTime": "26 грудня 18:00, пт",
+      "venue": "Київ, Будинок архітектора"
+    },
+    "2cf0f07d292b34375090c600eee5693e65adeb451024f76bb29919122b1c0207": {
+      "title": "Tember Blanche | Київ",
+      "price": "від 499 ₴",
+      "link": "https://concert.ua/uk/event/tember-blanche?sc_content=26399_r1480v1881",
+      "eventId": "273348",
+      "dateTime": "6 грудня 19:00, сб",
+      "venue": "Київ, ORIGIN STAGE"
+    },
+    "1ba231b7a771393c3efcfb3ac049582490703cfc666106c7be128011b93963ef": {
+      "title": "Maryna Krut",
+      "price": "від 400 ₴",
+      "link": "https://concert.ua/uk/event/maryna-krut?sc_content=26399_r1480v1881",
+      "eventId": "274584",
+      "dateTime": "20 грудня 17:00, сб",
+      "venue": "Київ, Палац Україна"
+    },
+    "e3e55799b61528ce5809b5130442741fce6a76c57ce05920f539bc0274894108": {
+      "title": "Brykulets",
+      "price": "від 790 ₴",
+      "link": "https://concert.ua/uk/event/brykulets?sc_content=26399_r1480v1881",
+      "eventId": "271368",
+      "dateTime": "29 листопада 19:00, сб",
+      "venue": "Київ, ORIGIN STAGE"
+    },
+    "efa9080c94dd182b6bcbe9df4012938a4647d55f71ea45205642ca3cbb45f1a3": {
+      "title": "СКАЖИ ЩОСЬ ПОГАНЕ",
+      "price": "від 490 ₴",
+      "link": "https://concert.ua/uk/event/skazhi-shos-pogane-kyiv2025?sc_content=26399_r1480v1881",
+      "eventId": "267943",
+      "dateTime": "26 жовтня 18:00, нд",
+      "venue": "Київ, ATLAS"
+    },
+    "8f027177af67a914666c76ca3d2e0001f3768ce2cdc9cbce1a5bc464ac69027d": {
+      "title": "Back to the 90`s та 2000`s. Гурт Море Хуана",
+      "price": "від 175 ₴",
+      "link": "/uk/event/back-to-the-90s-ta-2000s-gurt-more-huana",
+      "eventId": "274672",
+      "dateTime": "10 жовтня 19:00, пт",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "7304d07b671ad38758e3794c02c0a1f33483352e0eba9cac75a1cff2cc2e9418": {
+      "title": "Італійська музика під зоряним небом",
+      "price": "від 800 ₴",
+      "link": "/uk/events/italiiska-muzika-pid-zorjanim-nebom",
+      "eventId": "220049",
+      "dateTime": "10 жовтня, пт",
+      "venue": "| Київ, Київський планетарій"
+    },
+    "4704734d0569fb9d6c7e2474b50ab73767fa0d2fb5a890f615696e63659295e8": {
+      "title": "Сметана. Дворжак. Сібеліус",
+      "price": "від 400 ₴",
+      "link": "/uk/event/smetana-dvorzhak-sibelius",
+      "eventId": "271285",
+      "dateTime": "10 жовтня 19:00, пт",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "f773058a131016d24eb5bca7b991b3860a98e2373017f1866a87fad164cb084a": {
+      "title": "Очеретяний кіт",
+      "price": "від 290 ₴",
+      "link": "/uk/event/ocheretjanii-kit-15-10",
+      "eventId": "273319",
+      "dateTime": "15 жовтня 19:00, ср",
+      "venue": "| Київ, Music Pub \"Pepper's Club\""
+    },
+    "8549cf65330a373145995448fbda5875810b29889c2c50e6b07ca3a6e06cbb3e": {
+      "title": "TAIMANOVA",
+      "price": "від 450 ₴",
+      "link": "/uk/event/taimanova",
+      "eventId": "263319",
+      "dateTime": "11 жовтня 19:00, сб",
+      "venue": "| Київ, ATLAS"
+    },
+    "f10dbcbcd30752040538f554c5a6cba72d4a5d49ccf8e57d7f4654740f4b62fd": {
+      "title": "Благодійний концерт від \"Sad\"",
+      "price": "від 800 ₴",
+      "link": "/uk/event/blagodiinyi-kontsert-vid-sad",
+      "eventId": "274179",
+      "dateTime": "12 жовтня 16:00, нд",
+      "venue": "| Київ, Розаріум Національного ботанічного саду ім.М.М.Гришка"
+    },
+    "7c9cd7ec881cecf3827bdf640494569ff7a37f91f24e53508228305c836a06b0": {
+      "title": "Подорож Сонячною системою",
+      "price": "від 250 ₴",
+      "link": "/uk/events/podorozh-sonjachnoyu-sistemoyu",
+      "eventId": "36513",
+      "dateTime": "07.10, 08.10, 09.10 ... 11.11",
+      "venue": "| Київ, Київський планетарій"
+    },
+    "ae2c613b027921c9ce5ef5b0debc7138953d4c0068ec52a6113a048229d4c745": {
+      "title": "Гурт All Night. Дует",
+      "price": "від 125 ₴",
+      "link": "/uk/event/gurt-all-night-duet-07-10",
+      "eventId": "273671",
+      "dateTime": "7 жовтня 19:00, вт",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "a8281289587af2162c1dc14413ad917db73fd2c9a51c0707238e1ace332f6ace": {
+      "title": "Пашина 20. Битва імен. SMOKIE vs BEE GEES",
+      "price": "від 390 ₴",
+      "link": "/uk/event/pashina-20-bitva-imen-smokie-vs-bee-gees",
+      "eventId": "273952",
+      "dateTime": "8 жовтня 18:30, ср",
+      "venue": "| Київ, Music Pub \"Pepper's Club\""
+    },
+    "a09d3d418abb7167e1be147de001a00fbb6f990468f8d4dee073c1c104ccecb2": {
+      "title": "Дебюссі. Франк. Дютійо",
+      "price": "від 200 ₴",
+      "link": "/uk/event/debyussi-frank-dyutiio",
+      "eventId": "271258",
+      "dateTime": "8 жовтня 19:00, ср",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "373206d4533b8f79a8b63a762f29677751f14a1c0c094ce74288ff6ac4e5bfad": {
+      "title": "Юхим Дим",
+      "price": "від 150 ₴",
+      "link": "/uk/event/yuhim-dim",
+      "eventId": "276152",
+      "dateTime": "8 жовтня 19:00, ср",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "eb05c443b0e1cbdb56e9ffb889e0b87904264a0ec59d93e829e0a1330a1f4452": {
+      "title": "Юхим Дим",
+      "price": "від 150 ₴",
+      "link": "/uk/event/yuhim-dim-04",
+      "eventId": "272966",
+      "dateTime": "9 жовтня 19:00, чт",
+      "venue": "| Київ, GARNISON MILITARY PUB"
+    },
+    "f1fa3006f68ca50c16c415aeffefb66b951f6f9d3d7d49918a5a38bbf14f282e": {
+      "title": "Гурт ПолітНормальниЙ",
+      "price": "від 150 ₴",
+      "link": "/uk/event/gurt-politnormalnii",
+      "eventId": "276154",
+      "dateTime": "9 жовтня 19:00, чт",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "928ad7fe4e7b5fe6f37e9e7a9b5629fd8ba60558cbc950fbd7fa511dfa56f6ff": {
+      "title": "ANIME. Part 2. Svitlomusik",
+      "price": "від 250 ₴",
+      "link": "/uk/event/anime-part-2-svitlomusic",
+      "eventId": "270069",
+      "dateTime": "9 жовтня 19:00, чт",
+      "venue": "| Київ, Національна музична академія Чайковського"
+    },
+    "529c15b4e8c45ab6c27740a1a8a50f3f8bfef5241c850c161e90295eb0e4dd4a": {
+      "title": "Класика під зорями. Allegretto",
+      "price": "від 800 ₴",
+      "link": "/uk/events/klasika-pid-zorjami-allegretto",
+      "eventId": "71420",
+      "dateTime": "09.10, 26.11",
+      "venue": "| Київ, Київський планетарій"
+    },
+    "04681eb544917dd345ebaeb17116affdd7f23055b4ada36d157866cea65cb361": {
+      "title": "(Меморіальний будинок М.Лисенка) Made in Ukraine",
+      "price": "від 300 ₴",
+      "link": "/uk/events/memorialnii-budinok-mlisenka-made-in-ukraine",
+      "eventId": "273254",
+      "dateTime": "10 жовтня, пт",
+      "venue": "| Київ, Будинок-музей Миколи Лисенка"
+    },
+    "8e60edc6b872bf043b13827041c558e5469b58e1397ade5165e7ebd62d04c059": {
+      "title": "Made in Ukraine",
+      "price": "від 300 ₴",
+      "link": "/uk/event/made-in-ukraine",
+      "eventId": "273267",
+      "dateTime": "10 жовтня 17:00, пт",
+      "venue": "| Київ, Будинок-музей Миколи Лисенка"
+    },
+    "e27d1eeaf032d80f3c1b4e2f58703a5615fe90d293544dc57815f290bb7814e0": {
+      "title": "Триб`ют Queen. Гурт Jack London",
+      "price": "від 175 ₴",
+      "link": "/uk/event/tribyut-queen-gurt-jack-london",
+      "eventId": "275080",
+      "dateTime": "10 жовтня 19:00, пт",
+      "venue": "| Київ, GARNISON MILITARY PUB"
+    },
+    "633a7424096780a4966b45ec4f5392120634caac5c65106d1226cb7aa5008a2d": {
+      "title": "Триб`ют Queen. Гурт ROCK YOU!",
+      "price": "від 200 ₴",
+      "link": "/uk/event/tribyut-queen-gurt-rock-you",
+      "eventId": "272852",
+      "dateTime": "10 жовтня 19:00, пт",
+      "venue": "| Київ, Docker Pub"
+    },
+    "25587e2cd48746e5e7303a642591d13b0d384c72ff21afbb613c536f24e7352c": {
+      "title": "Гра в класику  3+",
+      "price": "від 200 ₴",
+      "link": "/uk/event/gra-v-klasiku-3",
+      "eventId": "271286",
+      "dateTime": "11 жовтня 12:00, сб",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "f315ae8ff5a3b98ed17806bcf6e45190fbad6c08e2fb452891c1e61e134769ee": {
+      "title": "(Музей Шолом Алейхема) Шалом",
+      "price": "від 200 ₴",
+      "link": "/uk/events/muzei-sholom-aleihema-shalom",
+      "eventId": "273255",
+      "dateTime": "11 жовтня, сб",
+      "venue": "| Київ, Музей Шолом-Алейхема"
+    },
+    "eba4a67e0d97486813d5646ecdfb6ea46bd28da4a7a3d8c2fd4f086c095192a5": {
+      "title": "Шалом",
+      "price": "від 200 ₴",
+      "link": "/uk/event/shalom",
+      "eventId": "273268",
+      "dateTime": "11 жовтня 15:00, сб",
+      "venue": "| Київ, Музей Шолом-Алейхема"
+    },
+    "de8b0d84ea55cf18bfd28168db766ae7fc9b5479d27e5f772a7b6292fb8b6d43": {
+      "title": "CARIBBEAN CLUB DISCO PARTY",
+      "price": "від 290 ₴",
+      "link": "/uk/events/caribbean-club-disco-party",
+      "eventId": "235174",
+      "dateTime": "11.10, 25.10",
+      "venue": "| Київ, CARIBBEAN club"
+    },
+    "e2424124d49ee1185d89f7d5ef7f555232ef84f8a37b9e3935fe0584d709bcd2": {
+      "title": "Концерт Stepanenko Brothers",
+      "price": "від 450 ₴",
+      "link": "/uk/event/stepanenko-brothers",
+      "eventId": "276149",
+      "dateTime": "11 жовтня 19:00, сб",
+      "venue": "| Київ, Sweet Amelie"
+    },
+    "ad643d05e44be411466c9f5abbb90ce33644011f26d5a458664b90a58ba6b1c9": {
+      "title": "Трибʼют Led Zeppelin. Гурт Led Band",
+      "price": "від 200 ₴",
+      "link": "/uk/event/tribyut-led-zeppelin-gurt-led-band",
+      "eventId": "272854",
+      "dateTime": "11 жовтня 19:00, сб",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "3a1a5e43f813a820b6c49b13b544193b6d267fb77b6d32d35a28254967880e55": {
+      "title": "Timan & Ebralidze в MOREWELL",
+      "price": "від 250 ₴",
+      "link": "/uk/event/timan-ebralidze-v-morewell",
+      "eventId": "274728",
+      "dateTime": "11 жовтня 19:30, сб",
+      "venue": "| Київ, Комплекс відпочинку Morewell"
+    },
+    "d0f7e4a3ac2f70dce0dadf328476a15b55b28543cb893a350af672608fafe888": {
+      "title": "Chill & Groove у Sosnovel",
+      "price": "від 350 ₴",
+      "link": "/uk/event/chill-groove-u-sosnovel",
+      "eventId": "274734",
+      "dateTime": "11 жовтня 19:30, сб",
+      "venue": "| Київ, Заміський комплекс Sosnovel"
+    },
+    "48eac3f0483a41b4ebb7a50bd203f56b1b1268ee600f7da9af67369893a425d0": {
+      "title": "(Меморіальний будинок М.Лисенка) Maza. Tarrega",
+      "price": "від 300 ₴",
+      "link": "/uk/events/memorialnii-budinok-mlisenka-maza-tarrega",
+      "eventId": "273256",
+      "dateTime": "12 жовтня, нд",
+      "venue": "| Київ, Будинок-музей Миколи Лисенка"
+    },
+    "ff3f00f1ee445eb599ec5dd9cb6daa541198a279a9513dcce139815ea5f3a3a0": {
+      "title": "Maza. Tarrega",
+      "price": "від 300 ₴",
+      "link": "/uk/event/maza-tarrega",
+      "eventId": "273269",
+      "dateTime": "12 жовтня 15:00, нд",
+      "venue": "| Київ, Будинок-музей Миколи Лисенка"
+    },
+    "30a01ca899aad3ab69f2f6283b5aec0906598e33e6ca1f41f3b5d36f58e7c429": {
+      "title": "Трибʼют Imagine Dragons. Гурт Jack London",
+      "price": "від 175 ₴",
+      "link": "/uk/event/tribyut-imagine-dragons-gurt-jack-london",
+      "eventId": "272967",
+      "dateTime": "12 жовтня 19:00, нд",
+      "venue": "| Київ, Docker Pub"
+    },
+    "e9f6472113e428adae54ea6e95c4ca0a53fc2a9aafeee6fd2e85804adafc6f0f": {
+      "title": "Живосил Лютий",
+      "price": "від 150 ₴",
+      "link": "/uk/event/zhivosil-lyutii",
+      "eventId": "276331",
+      "dateTime": "12 жовтня 19:00, нд",
+      "venue": "| Київ, GARNISON MILITARY PUB"
+    },
+    "e36d7397ba48101fb77cdb0023c7aaea8f5527bb9fb6d5dfc1d60d1448f33a97": {
+      "title": "Гурт AVTOR",
+      "price": "від 200 ₴",
+      "link": "/uk/event/gurt-avtor",
+      "eventId": "275815",
+      "dateTime": "12 жовтня 19:00, нд",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "3767a96f2eb28e9e41db8c51f1ba011522414a0941d3a59c49bfa14367b499fc": {
+      "title": "Київські солісти. До 30-річчя колективу",
+      "price": "від 250 ₴",
+      "link": "/uk/event/kiyivski-solisti",
+      "eventId": "272142",
+      "dateTime": "12 жовтня 19:00, нд",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "f9e4818cacb37a78ccb2c60655adc95dee60422c79e34d938578df30dc649019": {
+      "title": "Івасюк. Зігріті світлом",
+      "price": "від 350 ₴",
+      "link": "/uk/event/ivasyuk-zigriti-svitlom",
+      "eventId": "273450",
+      "dateTime": "13 жовтня 17:00, пн",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "1ea2156a3f3c963a275ad6afb57c7f162acaba7c49fa98910999ab9a7f3bcff9": {
+      "title": "Свідоцтво про життя. Ада Роговцева",
+      "price": "від 200 ₴",
+      "link": "/uk/events/svidoctvo-pro-zhittja-ada-rogovceva",
+      "eventId": "273614",
+      "dateTime": "13 жовтня, пн",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "51d69d0247e21d67ce5b18b20f274c850a75eae1a7d3cd560a69baf2bcaf5953": {
+      "title": "Людмила Марцевич фортепіано",
+      "price": "від 200 ₴",
+      "link": "/uk/event/lyudmila-marcevich-fortepiano",
+      "eventId": "273613",
+      "dateTime": "13 жовтня 19:00, пн",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "44b2063bbfe079d8437d601a0f05f31f9ca152d43f798f35af565b994a4bfed1": {
+      "title": "Акорди української душі. Концерт дуету \"Чорний Джуфер\"",
+      "price": "від 500 ₴",
+      "link": "/uk/events/akordi-ukrayinskoyi-dushi",
+      "eventId": "266762",
+      "dateTime": "14 жовтня, вт",
+      "venue": "| Київ, Київський національний академічний театр оперети"
+    },
+    "a6df0bbb8b99c7207b646eb6ecb79db06aa80d287448620d731addd2bd4d420d": {
+      "title": "Мелодії ночі, мелодії дня",
+      "price": "від 350 ₴",
+      "link": "/uk/event/melodiyi-nochi-melodiyi-dnja",
+      "eventId": "273451",
+      "dateTime": "14 жовтня 19:00, вт",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "dd8105c3698cc49495f391316ff5bebd49fc899ab26587efb8643aabc4b821d6": {
+      "title": "(Музичний салон НФУ) Мелодії ночі, мелодії дня",
+      "price": "від 350 ₴",
+      "link": "/uk/events/muzichnii-salon-nfu-melodiyi-nochi-melodiyi-dnja",
+      "eventId": "273436",
+      "dateTime": "14 жовтня, вт",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "74f349920056d63885163e7b853dc2407fcb1bfff8eb88277e1b87086ec4fcf2": {
+      "title": "Мелодія, що назавжди з нами. Вечір пісень Ігоря Поклада",
+      "price": "від 300 ₴",
+      "link": "/uk/events/melodija-sho-nazavzhdi-z-nami",
+      "eventId": "269903",
+      "dateTime": "7 вересня 16:00, нд",
+      "venue": "| Київ, МКЦ ім. І. Козловського"
+    },
+    "4c564fa62c96af037ae467bc0f749d7011f5a38670f13e534752b51282e2ea76": {
+      "title": "Моцарт. Вівальді. Бруні. Дворжак. Вишукана класика",
+      "price": "від 250 ₴",
+      "link": "/uk/event/vishukana-klasika",
+      "eventId": "272295",
+      "dateTime": "15 жовтня 19:00, ср",
+      "venue": "| Київ, Мала Опера"
+    },
+    "984c6f3015e52cabdc5541b5ef577d1fdbe29c88b9afdb8acf9ce37f1940a701": {
+      "title": "Шуберт, Штраус, Васкс, Родін",
+      "price": "від 250 ₴",
+      "link": "/uk/event/shubert-shtraus-vasks-rodin",
+      "eventId": "271295",
+      "dateTime": "15 жовтня 19:00, ср",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "d5c9f3bf6f6e1233199ee43a3a87984e2561a44a494c09a54f5d740fc3ad77f8": {
+      "title": "МОЦАРТ | ВІВАЛЬДІ | БРУНІ | ДВОРЖАК | ВИШУКАНА КЛАСИКА",
+      "price": "від 250 ₴",
+      "link": "/uk/events/mocart-vivaldi-bruni-dvorzhak-vishukana-klasika",
+      "eventId": "272291",
+      "dateTime": "1 жовтня 19:00, ср",
+      "venue": "| Київ, Мала Опера"
+    },
+    "af5f3d8dd7356ac12105813fb39328a493e5f06a3544b51d71f6b4bec0e935d0": {
+      "title": "Джаз під зірками. Джаз крізь час. SOLOVIOV & Band",
+      "price": "від 800 ₴",
+      "link": "/uk/events/dzhaz-pid-zirkami-soloviov-and-band",
+      "eventId": "229598",
+      "dateTime": "15 жовтня, ср",
+      "venue": "| Київ, Київський планетарій"
+    },
+    "dd9108e9d56cfed847377760416fb9750d89a1df1fd9bb1cec657f4d1c7252be": {
+      "title": "Тільки в Києві. Ретро-вечірка",
+      "price": "від 350 ₴",
+      "link": "/uk/event/tilki-v-kiyevi-retro-vechirka",
+      "eventId": "273452",
+      "dateTime": "16 жовтня 17:00, чт",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "32ada8c54407fe37ca5cec0083ea51a4b2c59aa7c7f94dd2b1c135d71a7d0484": {
+      "title": "DIO vs Metallica. ROCK YOU!. Ігор Петров. Юрій Кучервей",
+      "price": "від 175 ₴",
+      "link": "/uk/event/dio-vs-metallica-bitva-titaniv",
+      "eventId": "273961",
+      "dateTime": "16 жовтня 19:00, чт",
+      "venue": "| Київ, Docker-G Pub"
+    },
+    "ad3ef97c4dd449ebb56d6e183811eaec0c5347685a3490197994239c04c7c3e3": {
+      "title": "Парфумер. Оркестр під зорями",
+      "price": "від 800 ₴",
+      "link": "/uk/events/parfumer",
+      "eventId": "232789",
+      "dateTime": "16.10, 20.11, 13.12",
+      "venue": "| Київ, Київський планетарій"
+    },
+    "64e7dbe0a651e0ae2448d884be2e02766981b92b1dbcdbf2149a6d366d6c8d55": {
+      "title": "Благодійна премія «GOLDEN GLOVE»",
+      "price": "від 790 ₴",
+      "link": "/uk/event/golden-glove",
+      "eventId": "268113",
+      "dateTime": "17 жовтня 17:00, пт",
+      "venue": "| Київ, Equides Club"
+    },
+    "a9a33e1959ef28feea744d25c1dbaab82a6e585406f90e3450b4433114e97e7f": {
+      "title": "Bach",
+      "price": "від 350 ₴",
+      "link": "/uk/event/bach",
+      "eventId": "273453",
+      "dateTime": "17 жовтня 17:00, пт",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "cf6bcd5a715af72a4b4ac7e0c95da4c7b0a347a84b06976ebcf0f118d89dee92": {
+      "title": "NOSTALGIE. Олег Степаненко та гурт Море Хуана",
+      "price": "від 200 ₴",
+      "link": "/uk/event/nostalgie-oleg-stepanenko-ta-gurt-more-huana",
+      "eventId": "273963",
+      "dateTime": "17 жовтня 19:00, пт",
+      "venue": "| Київ, Docker Pub"
+    },
+    "a281885fd1fa7d2676b19b985f46d60f8e807418f7b6113cce247bfdce851081": {
+      "title": "Філармонія Нескорених. Камерний оркестр Ренесанс",
+      "price": "від 200 ₴",
+      "link": "/uk/event/filarmonija-neskorenih-kamernii-orkestr-renesans",
+      "eventId": "271401",
+      "dateTime": "17 жовтня 19:00, пт",
+      "venue": "| Київ, Національна філармонія України"
+    },
+    "1f1a352f8812adcbbfd25aaf206f0ac6fe6ed2223f5fd4c806e1492a81496911": {
+      "title": "КінОрганум. Орган під зорями",
+      "price": "від 800 ₴",
+      "link": "/uk/events/kinorganum",
+      "eventId": "229617",
+      "dateTime": "8 червня 19:30, сб",
+      "venue": "| Київ, Київський планетарій"
+    }
+  }
+}

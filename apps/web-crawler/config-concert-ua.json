@@ -1,9 +1,9 @@
 {
-  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-24",
+  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-17",
   "waitFor": [".event-card", ".item-card"],
   "pagination": {
     "type": "infinite-scroll",
-    "scrollDelay": 3000 
+    "scrollDelay": 3000
   },
   "selectors": [
     {
@@ -66,5 +66,13 @@
   "outputFile": "products.json",
   "timeoutMs": 30000,
   "headless": false,
-  "retries": 1
+  "retries": 1,
+  "incremental": {
+    "enabled": true,
+    "uniqueKey": ["title", "venue", "dateTime"],
+    "storageFile": "concert-ua-state.json",
+    "stopOnMatch": true,
+    "trackChanges": true,
+    "updateExisting": true
+  }
 }

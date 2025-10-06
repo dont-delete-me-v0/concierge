@@ -12,30 +12,43 @@ export class PaginationHandler {
     if (delay > 0) await this.page.waitForTimeout(delay);
   }
 
-  async run(): Promise<void> {
+  async run(shouldStop?: () => Promise<boolean>): Promise<void> {
     const type = this.config?.type ?? 'none';
     const maxPages = this.config?.maxPages ?? 0; // Default to 0 for unlimited
     if (type === 'none') return;
 
     if (type === 'infinite-scroll') {
-      await this.infiniteScroll(maxPages, this.config?.scrollDelay ?? 1000);
+      await this.infiniteScroll(
+        maxPages,
+        this.config?.scrollDelay ?? 1000,
+        shouldStop
+      );
       return;
     }
 
     if (type === 'load-more') {
-      await this.clickLoadMore(this.config?.selector as string, maxPages);
+      await this.clickLoadMore(
+        this.config?.selector as string,
+        maxPages,
+        shouldStop
+      );
       return;
     }
 
     if (type === 'next-button') {
-      await this.clickNextButton(this.config?.selector as string, maxPages);
+      await this.clickNextButton(
+        this.config?.selector as string,
+        maxPages,
+        shouldStop
+      );
       return;
     }
   }
 
   private async infiniteScroll(
     maxPages: number,
-    scrollDelay: number
+    scrollDelay: number,
+    shouldStop?: () => Promise<boolean>
   ): Promise<void> {
     let attempts = 0;
     const hasMaxPages = maxPages > 0;
@@ -88,12 +101,17 @@ export class PaginationHandler {
 
       await this.page.waitForTimeout(scrollDelay);
       await this.waitAfterAction();
+      if (shouldStop && (await shouldStop().catch(() => false))) {
+        console.log('Stop condition met during infinite scroll');
+        break;
+      }
     }
   }
 
   private async clickLoadMore(
     selector: string,
-    maxPages: number
+    maxPages: number,
+    shouldStop?: () => Promise<boolean>
   ): Promise<void> {
     if (!selector) return;
     const hasMaxPages = maxPages > 0;
@@ -121,12 +139,17 @@ export class PaginationHandler {
 
       await button.click({ timeout: 5000 }).catch(() => undefined);
       await this.waitAfterAction();
+      if (shouldStop && (await shouldStop().catch(() => false))) {
+        console.log('Stop condition met during load-more pagination');
+        break;
+      }
     }
   }
 
   private async clickNextButton(
     selector: string,
-    maxPages: number
+    maxPages: number,
+    shouldStop?: () => Promise<boolean>
   ): Promise<void> {
     if (!selector) return;
     const hasMaxPages = maxPages > 0;
@@ -154,6 +177,10 @@ export class PaginationHandler {
 
       await btn.click({ timeout: 5000 }).catch(() => undefined);
       await this.waitAfterAction();
+      if (shouldStop && (await shouldStop().catch(() => false))) {
+        console.log('Stop condition met during next-button pagination');
+        break;
+      }
     }
   }
 }
