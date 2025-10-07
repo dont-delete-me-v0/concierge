@@ -6,6 +6,8 @@ import {
   loadIncrementalState,
   saveIncrementalState,
 } from './incremental.js';
+import { RabbitPublisher } from './rabbitmq.js';
+import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState.js';
 import { ConfigurableScraper } from './scraper.js';
 import {
   validateConfig,
@@ -31,35 +33,105 @@ async function writeJson(filePath: string, data: unknown): Promise<void> {
 }
 
 async function runOnce(config: ScraperConfig): Promise<void> {
+  console.log('🚀 Starting crawler run...');
   const scraper = new ConfigurableScraper(config);
   try {
+    console.log('🌐 Initializing browser...');
     await scraper.init();
     const incremental = config.incremental;
     const out = config.outputFile ?? 'results.json';
 
     if (!incremental?.enabled) {
+      console.log('📊 Scraping data (no incremental mode)...');
       const rows = await scraper.scrape();
-      await writeJson(out, rows);
-      console.log(`Saved ${rows.length} rows to ${out}`);
+      console.log(`📈 Scraped ${rows.length} rows`);
+
+      const saveOutput =
+        String(process.env.CRAWLER_SAVE_OUTPUT || '').toLowerCase() === 'true';
+      if (saveOutput) {
+        console.log(`💾 Saving to file: ${out}`);
+        await writeJson(out, rows);
+        console.log(`✅ Saved ${rows.length} rows to ${out}`);
+      }
+
+      // Publish to RabbitMQ using all fields as identity when uniqueKey not provided
+      console.log('📤 Publishing to RabbitMQ...');
+      const fallbackKeys = rows.length > 0 ? Object.keys(rows[0]).sort() : [];
+      const publisher = new RabbitPublisher();
+      await publisher.publishMany(
+        rows.map(row => ({
+          id: computeRowHash(row, fallbackKeys),
+          title: row.title,
+          price: row.price,
+          link: row.link,
+          eventId: row.eventId,
+          dateTime: row.dateTime,
+          venue: row.venue,
+        }))
+      );
+      await publisher.close();
+      console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
       return;
     }
 
     const uniqueKey = incremental.uniqueKey ?? [];
     if (uniqueKey.length === 0) {
+      console.log('📊 Scraping data (no unique key)...');
       const rows = await scraper.scrape();
-      await writeJson(out, rows);
-      console.log(`Saved ${rows.length} rows to ${out}`);
+      console.log(`📈 Scraped ${rows.length} rows`);
+
+      const saveOutput =
+        String(process.env.CRAWLER_SAVE_OUTPUT || '').toLowerCase() === 'true';
+      if (saveOutput) {
+        console.log(`💾 Saving to file: ${out}`);
+        await writeJson(out, rows);
+        console.log(`✅ Saved ${rows.length} rows to ${out}`);
+      }
+
+      console.log('📤 Publishing to RabbitMQ...');
+      const fallbackKeys = rows.length > 0 ? Object.keys(rows[0]).sort() : [];
+      const publisher = new RabbitPublisher();
+      await publisher.publishMany(
+        rows.map(row => ({
+          id: computeRowHash(row, fallbackKeys),
+          title: row.title,
+          price: row.price,
+          link: row.link,
+          eventId: row.eventId,
+          dateTime: row.dateTime,
+          venue: row.venue,
+        }))
+      );
+      await publisher.close();
+      console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
       return;
     }
 
-    const storageFile = incremental.storageFile ?? 'state.json';
-    const existingState = await loadIncrementalState(storageFile);
-    const existingHashes = new Set<string>(existingState?.hashes ?? []);
+    // Force Redis for state when URL is available, otherwise fall back to JSON
+    const useRedis =
+      (process.env.REDIS_URL || 'redis://localhost:6379').length > 0;
+    const prefix = process.env.STATE_PREFIX || 'concert.ua';
+
+    console.log(
+      `🔍 Incremental mode enabled (Redis: ${useRedis ? '✅' : '❌'})`
+    );
+    console.log(`🔑 Unique key: [${uniqueKey.join(', ')}]`);
+    console.log(`🏷️  State prefix: ${prefix}`);
+
+    const existingState = useRedis
+      ? null
+      : await loadIncrementalState('state.json');
+    const existingHashes = useRedis
+      ? new Set<string>()
+      : new Set<string>(existingState?.hashes ?? []);
 
     // Always fully scrape; deduplicate on write
+    console.log('📊 Scraping data...');
     const allRows = await scraper.scrape();
+    console.log(`📈 Scraped ${allRows.length} total rows`);
 
     // Process rows: find new ones, optionally detect changes for existing
+    console.log('🔍 Processing rows for deduplication...');
     const newRows: ExtractedRow[] = [];
     const newHashes: string[] = [];
     const updatedItems: Array<{ hash: string; row: ExtractedRow }> = [];
@@ -68,13 +140,20 @@ async function runOnce(config: ScraperConfig): Promise<void> {
 
     for (const row of allRows) {
       const hash = computeRowHash(row, uniqueKey);
-      if (!existingHashes.has(hash)) {
+      const seen = useRedis
+        ? await wasSeen(prefix, hash)
+        : existingHashes.has(hash);
+      if (!seen) {
         newRows.push(row);
         newHashes.push(hash);
       } else if (trackChanges || updateExisting) {
         updatedItems.push({ hash, row });
       }
     }
+
+    console.log(
+      `📊 Found ${newRows.length} new rows, ${updatedItems.length} existing rows`
+    );
 
     // Build updated rows if needed
     const updatedRows: ExtractedRow[] = [];
@@ -137,26 +216,78 @@ async function runOnce(config: ScraperConfig): Promise<void> {
 
     // Write output: new rows plus optionally updated rows
     const outputRows = updateExisting ? [...newRows, ...updatedRows] : newRows;
-    await writeJson(out, outputRows);
+    const saveOutput =
+      String(process.env.CRAWLER_SAVE_OUTPUT || '').toLowerCase() === 'true';
+    if (saveOutput) {
+      await writeJson(out, outputRows);
+      console.log(
+        `Saved ${newRows.length} new${updateExisting ? ` and ${updatedRows.length} updated` : ''} rows to ${out}`
+      );
+    }
+
+    // Publish to RabbitMQ with batching and confirms
+    console.log('📤 Publishing to RabbitMQ...');
+    const publisher = new RabbitPublisher();
+    await publisher.publishMany(
+      outputRows.map(row => ({
+        id: computeRowHash(row, uniqueKey),
+        title: row.title,
+        price: row.price,
+        link: row.link,
+        eventId: row.eventId,
+        dateTime: row.dateTime,
+        venue: row.venue,
+      }))
+    );
+    await publisher.close();
     console.log(
-      `Saved ${newRows.length} new${updateExisting ? ` and ${updatedRows.length} updated` : ''} rows to ${out}`
+      `✅ Published ${outputRows.length} ${updateExisting ? `(new: ${newRows.length}, updated: ${updatedRows.length}) ` : ''}rows to RabbitMQ`
     );
 
     // Build next state
-    const nextHashes = Array.from(
-      new Set([...(existingState?.hashes ?? []), ...newHashes])
-    );
-    const nextState = {
-      lastUpdate: new Date().toISOString(),
-      totalItems: nextHashes.length,
-      hashes: nextHashes,
-      ...(trackChanges || updateExisting ? { items: itemsState } : {}),
-    } as const;
-
-    await saveIncrementalState(storageFile, nextState);
-    console.log(
-      `Updated state with ${newHashes.length} new hashes at ${storageFile}`
-    );
+    console.log('💾 Updating state...');
+    if (useRedis) {
+      await markSeen(prefix, newHashes);
+      // We cannot know the full set size cheaply; set totalItems to SCard
+      const total =
+        (await (
+          await import('redis')
+        )
+          .createClient({
+            url: process.env.REDIS_URL || 'redis://localhost:6379',
+          })
+          .connect()
+          .then(async c => {
+            try {
+              const n = await c.sCard(`${prefix}:hashes`);
+              await c.quit();
+              return n;
+            } catch {
+              try {
+                await c.quit();
+              } catch {}
+              return undefined;
+            }
+          })) ?? newHashes.length;
+      await updateMeta(prefix, Number(total));
+      console.log(
+        `✅ Updated Redis state for ${prefix} with ${newHashes.length} new hashes (total: ${total})`
+      );
+    } else {
+      const nextHashes = Array.from(
+        new Set([...(existingState?.hashes ?? []), ...newHashes])
+      );
+      const nextState = {
+        lastUpdate: new Date().toISOString(),
+        totalItems: nextHashes.length,
+        hashes: nextHashes,
+        ...(trackChanges || updateExisting ? { items: itemsState } : {}),
+      } as const;
+      await saveIncrementalState('state.json', nextState);
+      console.log(
+        `✅ Updated state with ${newHashes.length} new hashes at state.json (total: ${nextHashes.length})`
+      );
+    }
   } finally {
     await scraper.close();
   }
@@ -192,6 +323,11 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error('Fatal error:', err);
     process.exitCode = 1;
+  } finally {
+    // Ensure all connections are closed
+    // publisher is created per run and closed above
+    await closeRedis();
+    process.exit(process.exitCode || 0);
   }
 }
 
