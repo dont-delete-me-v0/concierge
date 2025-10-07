@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   db:
     image: postgres:latest
@@ -36,9 +34,29 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"    # AMQP port
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   pgadmin_data:
+  rabbitmq_data:
 
 networks:
   default:
