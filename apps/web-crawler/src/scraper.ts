@@ -1,13 +1,17 @@
 import {
-  chromium,
   devices,
   type Browser,
   type LaunchOptions,
   type Page,
 } from 'playwright';
+import { chromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { computeRowHash } from './incremental.js';
 import { PaginationHandler } from './pagination.js';
 import type { ExtractedRow, ScraperConfig } from './types.js';
+chromium.use(StealthPlugin());
+
+let userAgentSequentialIndex = 0;
 
 export class ConfigurableScraper {
   private browser: Browser | null = null;
@@ -30,8 +34,25 @@ export class ConfigurableScraper {
     console.log('Launch options:', launchOptions);
     this.browser = await chromium.launch(launchOptions);
     console.log('Browser launched successfully');
+    const configuredUserAgents = this.config.userAgents ?? [];
+    let selectedUserAgent: string | undefined;
+    if (configuredUserAgents.length > 0) {
+      if ((this.config.userAgentRotation ?? 'random') === 'sequential') {
+        selectedUserAgent =
+          configuredUserAgents[
+            userAgentSequentialIndex % configuredUserAgents.length
+          ];
+        userAgentSequentialIndex =
+          (userAgentSequentialIndex + 1) % configuredUserAgents.length;
+      } else {
+        const idx = Math.floor(Math.random() * configuredUserAgents.length);
+        selectedUserAgent = configuredUserAgents[idx];
+      }
+    }
+
     const context = await this.browser.newContext({
       ...devices['Desktop Chrome'],
+      userAgent: selectedUserAgent ?? devices['Desktop Chrome'].userAgent,
     });
     console.log('Browser context created');
     this.page = await context.newPage();

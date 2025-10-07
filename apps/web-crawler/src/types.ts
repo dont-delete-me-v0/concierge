@@ -35,6 +35,8 @@ export interface ScraperConfig {
   headless?: boolean;
   proxyServer?: string;
   retries?: number;
+  userAgents?: string[];
+  userAgentRotation?: 'random' | 'sequential';
   incremental?: IncrementalConfig;
 }
 
@@ -291,6 +293,24 @@ export function validateConfig(input: unknown): ValidationResult {
     errors.push('"retries" must be a non-negative number when provided');
   }
 
+  // user-agent options validation
+  if (obj.userAgents !== undefined) {
+    const ua = obj.userAgents as unknown;
+    if (!Array.isArray(ua) || ua.length === 0) {
+      errors.push(
+        '"userAgents" must be a non-empty array of strings when provided'
+      );
+    } else if (!ua.every(v => typeof v === 'string' && v.length > 0)) {
+      errors.push('"userAgents" must contain only non-empty strings');
+    }
+  }
+  if (obj.userAgentRotation !== undefined) {
+    const rot = obj.userAgentRotation as unknown;
+    if (rot !== 'random' && rot !== 'sequential') {
+      errors.push('"userAgentRotation" must be one of: random | sequential');
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -307,6 +327,10 @@ export function validateConfig(input: unknown): ValidationResult {
     headless: (obj.headless as boolean | undefined) ?? true,
     proxyServer: obj.proxyServer as string | undefined,
     retries: (obj.retries as number | undefined) ?? 0,
+    userAgents: (obj.userAgents as string[] | undefined) ?? undefined,
+    userAgentRotation:
+      (obj.userAgentRotation as 'random' | 'sequential' | undefined) ??
+      'random',
     incremental: {
       enabled: enabledInc,
       uniqueKey: (inc?.uniqueKey as string[] | undefined) ?? undefined,

@@ -84,28 +84,105 @@ export class PaginationHandler {
         break;
       }
 
-      // Smooth scroll down gradually
-      await this.page.evaluate(() => {
-        /* eslint-disable no-undef */
-        const scrollStep = window.innerHeight * 0.8;
-        const scrollTo = Math.min(
-          window.scrollY + scrollStep,
-          document.body.scrollHeight
-        );
-        window.scrollTo({
-          top: scrollTo,
-          behavior: 'smooth',
-        });
-        /* eslint-enable no-undef */
-      });
+      // Random scroll behavior
+      await this.performRandomScroll(innerHeight, scrollHeight, scrollY);
 
-      await this.page.waitForTimeout(scrollDelay);
+      // Random delay with ±30% variation
+      const randomDelay = scrollDelay * (0.7 + Math.random() * 0.6);
+      await this.page.waitForTimeout(randomDelay);
+
       await this.waitAfterAction();
       if (shouldStop && (await shouldStop().catch(() => false))) {
         console.log('Stop condition met during infinite scroll');
         break;
       }
     }
+  }
+
+  private async performRandomScroll(
+    innerHeight: number,
+    scrollHeight: number,
+    currentScrollY: number
+  ): Promise<void> {
+    const random = Math.random();
+
+    // 5% chance of scrolling backward
+    if (random < 0.05) {
+      await this.scrollBackward(innerHeight, currentScrollY);
+      return;
+    }
+
+    // 10% chance of long pause (no scroll)
+    if (random < 0.15) {
+      console.log('Taking a long pause...');
+      await this.page.waitForTimeout(2000 + Math.random() * 3000);
+      return;
+    }
+
+    // 30% chance of mouse movement
+    if (random < 0.45) {
+      await this.performMouseMovement();
+    }
+
+    // Normal forward scroll with random step (50-80% of viewport)
+    await this.scrollForward(innerHeight, scrollHeight, currentScrollY);
+  }
+
+  private async scrollForward(
+    innerHeight: number,
+    scrollHeight: number,
+    currentScrollY: number
+  ): Promise<void> {
+    // Random step between 50-80% of viewport height
+    const stepRatio = 0.5 + Math.random() * 0.3;
+    const scrollStep = innerHeight * stepRatio;
+
+    await this.page.evaluate(step => {
+      /* eslint-disable no-undef */
+      const scrollTo = Math.min(
+        window.scrollY + step,
+        document.body.scrollHeight
+      );
+      window.scrollTo({
+        top: scrollTo,
+        behavior: 'smooth',
+      });
+      /* eslint-enable no-undef */
+    }, scrollStep);
+  }
+
+  private async scrollBackward(
+    innerHeight: number,
+    currentScrollY: number
+  ): Promise<void> {
+    console.log('Scrolling backward...');
+    const backwardStep = innerHeight * (0.2 + Math.random() * 0.3); // 20-50% of viewport
+    const scrollTo = Math.max(0, currentScrollY - backwardStep);
+
+    await this.page.evaluate(targetY => {
+      /* eslint-disable no-undef */
+      window.scrollTo({
+        top: targetY,
+        behavior: 'smooth',
+      });
+      /* eslint-enable no-undef */
+    }, scrollTo);
+  }
+
+  private async performMouseMovement(): Promise<void> {
+    console.log('Performing mouse movement...');
+    const viewport = await this.page.viewportSize();
+    if (!viewport) return;
+
+    // Random mouse movement within viewport
+    const startX = Math.random() * viewport.width;
+    const startY = Math.random() * viewport.height;
+    const endX = Math.random() * viewport.width;
+    const endY = Math.random() * viewport.height;
+
+    await this.page.mouse.move(startX, startY);
+    await this.page.waitForTimeout(100 + Math.random() * 200);
+    await this.page.mouse.move(endX, endY);
   }
 
   private async clickLoadMore(
