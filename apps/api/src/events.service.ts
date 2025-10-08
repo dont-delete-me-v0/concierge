@@ -9,6 +9,7 @@ export interface EventEntity {
   eventId?: string;
   dateTime?: string;
   venue?: string;
+  description?: string;
 }
 
 @Injectable()
@@ -17,15 +18,16 @@ export class EventsService {
 
   async upsert(e: EventEntity) {
     const sql = `
-      INSERT INTO public.events (id, title, price, link, "eventId", "dateTime", venue)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO public.events (id, title, price, link, "eventId", "dateTime", venue, description)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
         price = EXCLUDED.price,
         link = EXCLUDED.link,
         "eventId" = EXCLUDED."eventId",
         "dateTime" = EXCLUDED."dateTime",
-        venue = EXCLUDED.venue
+        venue = EXCLUDED.venue,
+        description = EXCLUDED.description
       RETURNING *
     `;
     const params = [
@@ -36,6 +38,7 @@ export class EventsService {
       e.eventId ?? null,
       e.dateTime ?? null,
       e.venue ?? null,
+      e.description ?? null,
     ];
     const { rows } = await this.db.query(sql, params);
     return rows[0];
@@ -72,6 +75,7 @@ export class EventsService {
       'eventId',
       'dateTime',
       'venue',
+      'description',
     ];
     const valuesSql: string[] = [];
     const params: unknown[] = [];
@@ -79,7 +83,7 @@ export class EventsService {
       const e = events[i];
       const base = i * cols.length;
       valuesSql.push(
-        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`
       );
       params.push(
         e.id,
@@ -88,11 +92,12 @@ export class EventsService {
         e.link ?? null,
         e.eventId ?? null,
         e.dateTime ?? null,
-        e.venue ?? null
+        e.venue ?? null,
+        e.description ?? null
       );
     }
     const sql = `
-      INSERT INTO public.events (id, title, price, link, "eventId", "dateTime", venue)
+      INSERT INTO public.events (id, title, price, link, "eventId", "dateTime", venue, description)
       VALUES ${valuesSql.join(',')}
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
@@ -100,7 +105,8 @@ export class EventsService {
         link = EXCLUDED.link,
         "eventId" = EXCLUDED."eventId",
         "dateTime" = EXCLUDED."dateTime",
-        venue = EXCLUDED.venue
+        venue = EXCLUDED.venue,
+        description = EXCLUDED.description
     `;
     await this.db.query(sql, params);
   }

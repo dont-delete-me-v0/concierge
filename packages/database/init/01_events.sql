@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS public.events (
   link TEXT,
   "eventId" TEXT,
   "dateTime" TEXT,
-  venue TEXT
+  venue TEXT,
+  description TEXT
 );
 
 -- Optional index for quick search by eventId if present

@@ -96,6 +96,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         eventId: payload.eventId,
         dateTime: payload.dateTime,
         venue: payload.venue,
+        description: payload.description,
       });
       this.channel.ack(msg);
       this.logger.debug(`Acked message id=${payload.id}`);
@@ -140,6 +141,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
             eventId: p.eventId,
             dateTime: p.dateTime,
             venue: p.venue,
+            description: p.description,
           }))
         );
         for (const m of batch) ch.ack(m);

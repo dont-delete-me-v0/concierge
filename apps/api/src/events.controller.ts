@@ -17,6 +17,7 @@ export interface EventDto {
   eventId?: string;
   dateTime?: string;
   venue?: string;
+  description?: string;
 }
 
 @Controller('events')

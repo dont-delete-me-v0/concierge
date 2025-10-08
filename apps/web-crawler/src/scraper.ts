@@ -111,7 +111,11 @@ export class ConfigurableScraper {
             else if (s.type === 'html') raw = node.innerHTML;
             else if (s.type === 'attribute')
               raw = node.getAttribute(s.attribute ?? '') ?? '';
-            if (s.transform === 'trim') raw = raw.trim();
+            if (s.transform === 'trim')
+              raw = raw
+                .replace(/\u00A0/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
             else if (s.transform === 'lowercase') raw = raw.toLowerCase();
             else if (s.transform === 'uppercase') raw = raw.toUpperCase();
             if (raw !== '') values.push(raw);
@@ -128,7 +132,11 @@ export class ConfigurableScraper {
           else if (s.type === 'html') raw = el.innerHTML;
           else if (s.type === 'attribute')
             raw = el.getAttribute(s.attribute ?? '') ?? '';
-          if (s.transform === 'trim') raw = raw.trim();
+          if (s.transform === 'trim')
+            raw = raw
+              .replace(/\u00A0/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim();
           else if (s.transform === 'lowercase') raw = raw.toLowerCase();
           else if (s.transform === 'uppercase') raw = raw.toUpperCase();
           result[s.name] = raw;
@@ -154,6 +162,194 @@ export class ConfigurableScraper {
       }
       rows.push(row);
     }
+    // Optionally enrich with details
+    if (!this.page) return rows;
+    const detailsCfg = this.config.details;
+    if (!detailsCfg) return rows;
+
+    const concurrency = Math.max(
+      1,
+      Math.min(detailsCfg.maxConcurrency ?? 3, 8)
+    );
+    const timeout = detailsCfg.timeoutMs ?? this.config.timeoutMs ?? 30000;
+    const waitFor = Array.isArray(detailsCfg.waitFor)
+      ? detailsCfg.waitFor
+      : detailsCfg.waitFor
+        ? [detailsCfg.waitFor]
+        : [];
+
+    // Determine targets: prefer link field if present, otherwise use click selector workflow
+    const targets: Array<{ idx: number; href?: string }> = [];
+    for (let i = 0; i < rows.length; i++) {
+      const href = rows[i].link;
+      if (href) targets.push({ idx: i, href });
+      else targets.push({ idx: i });
+    }
+
+    console.log(
+      `Enriching ${targets.length} items with details (concurrency=${concurrency})`
+    );
+    let cursor = 0;
+    const workers: Promise<void>[] = [];
+    const runWorker = async (): Promise<void> => {
+      while (cursor < targets.length) {
+        const { idx, href } = targets[cursor++];
+        try {
+          let details: Record<string, string | undefined> | undefined;
+          if (href) {
+            // Open new tab to the href
+            if (!this.page) continue; // type guard
+            const context = this.page.context();
+            const p = await context.newPage();
+            try {
+              await p.goto(href, { timeout, waitUntil: 'domcontentloaded' });
+              for (const sel of waitFor)
+                await p
+                  .waitForSelector(sel, { timeout })
+                  .catch(() => undefined);
+              details = await p.evaluate(selectors => {
+                /* eslint-disable no-undef */
+                const out = {} as Record<string, string | undefined>;
+                for (const s of selectors) {
+                  const list = document.querySelectorAll(s.selector);
+                  if (s.multiple) {
+                    // join multiple into single text for details
+                    const values: string[] = [];
+                    list.forEach((el: Element) => {
+                      const node = el as HTMLElement;
+                      let raw = '';
+                      if (s.type === 'text') raw = node.textContent ?? '';
+                      else if (s.type === 'html') raw = node.innerHTML;
+                      else if (s.type === 'attribute')
+                        raw = node.getAttribute(s.attribute ?? '') ?? '';
+                      if (s.transform === 'trim')
+                        raw = raw
+                          .replace(/\u00A0/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+                      else if (s.transform === 'lowercase')
+                        raw = raw.toLowerCase();
+                      else if (s.transform === 'uppercase')
+                        raw = raw.toUpperCase();
+                      if (raw !== '') values.push(raw);
+                    });
+                    out[s.name] = values.join('\n');
+                  } else {
+                    const el = list.item(0) as HTMLElement | null;
+                    if (!el) {
+                      out[s.name] = undefined;
+                      continue;
+                    }
+                    let raw = '';
+                    if (s.type === 'text') raw = el.textContent ?? '';
+                    else if (s.type === 'html') raw = el.innerHTML;
+                    else if (s.type === 'attribute')
+                      raw = el.getAttribute(s.attribute ?? '') ?? '';
+                    if (s.transform === 'trim')
+                      raw = raw
+                        .replace(/\u00A0/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    else if (s.transform === 'lowercase')
+                      raw = raw.toLowerCase();
+                    else if (s.transform === 'uppercase')
+                      raw = raw.toUpperCase();
+                    out[s.name] = raw;
+                  }
+                }
+                return out;
+                /* eslint-enable no-undef */
+              }, detailsCfg.selectors);
+            } finally {
+              await p.close().catch(() => undefined);
+            }
+          } else if (detailsCfg.clickSelector) {
+            // Click flow in same page via new tab opening
+            if (!this.page) continue; // type guard
+            const [newPage] = await Promise.all([
+              this.page
+                .context()
+                .waitForEvent('page', { timeout })
+                .catch(() => null),
+              this.page
+                .locator(detailsCfg.clickSelector)
+                .nth(idx)
+                .click({ timeout })
+                .catch(() => undefined),
+            ]);
+            if (newPage) {
+              try {
+                for (const sel of waitFor)
+                  await newPage
+                    .waitForSelector(sel, { timeout })
+                    .catch(() => undefined);
+                details = await newPage.evaluate(selectors => {
+                  /* eslint-disable no-undef */
+                  const out = {} as Record<string, string | undefined>;
+                  for (const s of selectors) {
+                    const list = document.querySelectorAll(s.selector);
+                    if (s.multiple) {
+                      const values: string[] = [];
+                      list.forEach((el: Element) => {
+                        const node = el as HTMLElement;
+                        let raw = '';
+                        if (s.type === 'text') raw = node.textContent ?? '';
+                        else if (s.type === 'html') raw = node.innerHTML;
+                        else if (s.type === 'attribute')
+                          raw = node.getAttribute(s.attribute ?? '') ?? '';
+                        if (s.transform === 'trim')
+                          raw = raw
+                            .replace(/\u00A0/g, ' ')
+                            .replace(/\s+/g, ' ')
+                            .trim();
+                        else if (s.transform === 'lowercase')
+                          raw = raw.toLowerCase();
+                        else if (s.transform === 'uppercase')
+                          raw = raw.toUpperCase();
+                        if (raw !== '') values.push(raw);
+                      });
+                      out[s.name] = values.join('\n');
+                    } else {
+                      const el = list.item(0) as HTMLElement | null;
+                      if (!el) {
+                        out[s.name] = undefined;
+                        continue;
+                      }
+                      let raw = '';
+                      if (s.type === 'text') raw = el.textContent ?? '';
+                      else if (s.type === 'html') raw = el.innerHTML;
+                      else if (s.type === 'attribute')
+                        raw = el.getAttribute(s.attribute ?? '') ?? '';
+                      if (s.transform === 'trim')
+                        raw = raw
+                          .replace(/\u00A0/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+                      else if (s.transform === 'lowercase')
+                        raw = raw.toLowerCase();
+                      else if (s.transform === 'uppercase')
+                        raw = raw.toUpperCase();
+                      out[s.name] = raw;
+                    }
+                  }
+                  return out;
+                  /* eslint-enable no-undef */
+                }, detailsCfg.selectors);
+              } finally {
+                await newPage.close().catch(() => undefined);
+              }
+            }
+          }
+          if (details) {
+            for (const [k, v] of Object.entries(details)) rows[idx][k] = v;
+          }
+        } catch {
+          // ignore per-item errors
+        }
+      }
+    };
+    for (let i = 0; i < concurrency; i++) workers.push(runWorker());
+    await Promise.all(workers);
     return rows;
   }
 }

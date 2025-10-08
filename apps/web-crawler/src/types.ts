@@ -25,6 +25,14 @@ export interface BasePaginationConfig {
   selector?: string;
 }
 
+export interface DetailsConfig {
+  clickSelector?: string;
+  selectors: SelectorConfig[];
+  waitFor?: string | string[];
+  maxConcurrency?: number;
+  timeoutMs?: number;
+}
+
 export interface ScraperConfig {
   url: string;
   waitFor: string | string[];
@@ -37,6 +45,7 @@ export interface ScraperConfig {
   retries?: number;
   userAgents?: string[];
   userAgentRotation?: 'random' | 'sequential';
+  details?: DetailsConfig;
   incremental?: IncrementalConfig;
 }
 
@@ -311,6 +320,93 @@ export function validateConfig(input: unknown): ValidationResult {
     }
   }
 
+  // details validation
+  if (obj.details !== undefined) {
+    const d = obj.details as Record<string, unknown>;
+    if (typeof d !== 'object' || d === null) {
+      errors.push('"details" must be an object when provided');
+    } else {
+      const ds = d.selectors as unknown;
+      if (!Array.isArray(ds) || ds.length === 0) {
+        errors.push('details.selectors must be a non-empty array');
+      } else {
+        for (let i = 0; i < ds.length; i++) {
+          const s = ds[i] as Record<string, unknown>;
+          if (typeof s !== 'object' || s === null) {
+            errors.push(`details.selectors[${i}] must be an object`);
+            continue;
+          }
+          if (typeof s.name !== 'string' || s.name.length === 0) {
+            errors.push(
+              `details.selectors[${i}].name must be a non-empty string`
+            );
+          }
+          if (typeof s.selector !== 'string' || s.selector.length === 0) {
+            errors.push(
+              `details.selectors[${i}].selector must be a non-empty string`
+            );
+          }
+          if (
+            s.type !== 'text' &&
+            s.type !== 'attribute' &&
+            s.type !== 'html'
+          ) {
+            errors.push(
+              `details.selectors[${i}].type must be one of: text | attribute | html`
+            );
+          }
+          if (
+            s.type === 'attribute' &&
+            (typeof s.attribute !== 'string' || s.attribute.length === 0)
+          ) {
+            errors.push(
+              `details.selectors[${i}].attribute must be provided when type = "attribute"`
+            );
+          }
+          if (
+            s.transform !== undefined &&
+            s.transform !== 'trim' &&
+            s.transform !== 'lowercase' &&
+            s.transform !== 'uppercase'
+          ) {
+            errors.push(
+              `details.selectors[${i}].transform must be one of: trim | lowercase | uppercase`
+            );
+          }
+        }
+      }
+      if (
+        d.maxConcurrency !== undefined &&
+        (typeof d.maxConcurrency !== 'number' || d.maxConcurrency <= 0)
+      ) {
+        errors.push(
+          'details.maxConcurrency must be a positive number when provided'
+        );
+      }
+      if (
+        d.timeoutMs !== undefined &&
+        (typeof d.timeoutMs !== 'number' || d.timeoutMs <= 0)
+      ) {
+        errors.push(
+          'details.timeoutMs must be a positive number when provided'
+        );
+      }
+      if (
+        d.waitFor !== undefined &&
+        !(
+          (typeof d.waitFor === 'string' && d.waitFor.length > 0) ||
+          (Array.isArray(d.waitFor) &&
+            d.waitFor.length > 0 &&
+            d.waitFor.every(v => typeof v === 'string' && v.length > 0))
+        )
+      ) {
+        errors.push(
+          'details.waitFor must be a non-empty string or array of non-empty strings when provided'
+        );
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }
@@ -331,6 +427,7 @@ export function validateConfig(input: unknown): ValidationResult {
     userAgentRotation:
       (obj.userAgentRotation as 'random' | 'sequential' | undefined) ??
       'random',
+    details: obj.details as DetailsConfig | undefined,
     incremental: {
       enabled: enabledInc,
       uniqueKey: (inc?.uniqueKey as string[] | undefined) ?? undefined,

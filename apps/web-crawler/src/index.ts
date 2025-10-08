@@ -67,6 +67,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
           eventId: row.eventId,
           dateTime: row.dateTime,
           venue: row.venue,
+          description: row.description,
         }))
       );
       await publisher.close();
@@ -100,6 +101,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
           eventId: row.eventId,
           dateTime: row.dateTime,
           venue: row.venue,
+          description: row.description,
         }))
       );
       await publisher.close();
@@ -237,6 +239,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
         eventId: row.eventId,
         dateTime: row.dateTime,
         venue: row.venue,
+        description: row.description,
       }))
     );
     await publisher.close();

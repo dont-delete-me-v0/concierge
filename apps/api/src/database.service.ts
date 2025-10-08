@@ -25,7 +25,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           link TEXT,
           "eventId" TEXT,
           "dateTime" TEXT,
-          venue TEXT
+          venue TEXT,
+          description TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_events_eventId ON public.events ("eventId");
       `
