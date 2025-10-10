@@ -99,6 +99,8 @@ export class ConfigurableScraper {
       return;
     }
     try {
+      // Use a shorter timeout for the content-filled stability check to avoid tabs hanging too long
+      const checkTimeout = Math.max(500, Math.min(timeout, 5000));
       if (selectorCfg.type === 'attribute') {
         const attr = selectorCfg.attribute || '';
         await page.waitForFunction(
@@ -108,7 +110,7 @@ export class ConfigurableScraper {
             return val.replace(/\u00A0/g, ' ').trim().length > 0;
           },
           { css: sel, attr },
-          { timeout }
+          { timeout: checkTimeout }
         );
       } else {
         await page.waitForFunction(
@@ -120,7 +122,7 @@ export class ConfigurableScraper {
             return txt.length > 0;
           },
           sel,
-          { timeout }
+          { timeout: checkTimeout }
         );
       }
     } catch {}
