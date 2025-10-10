@@ -21,6 +21,7 @@
     "amqplib": "^0.10.4",
     "axios": "^1.12.2",
     "cheerio": "^1.0.0-rc.12",
+    "luxon": "^3.7.2",
     "playwright": "^1.55.1",
     "playwright-extra": "^4.3.6",
     "puppeteer": "^24.22.3",
@@ -31,6 +32,7 @@
     "@concierge/eslint-config": "*",
     "@concierge/prettier-config": "*",
     "@types/amqplib": "^0.10.7",
+    "@types/luxon": "^3.7.1",
     "@types/node": "^22.10.2",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"

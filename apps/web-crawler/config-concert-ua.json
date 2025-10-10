@@ -1,5 +1,6 @@
 {
-  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-10",
+  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-17",
+  "category_name": "concerts",
   "waitFor": [".event-card", ".item-card"],
   "headless": true,
   "pagination": {

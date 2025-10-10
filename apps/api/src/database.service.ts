@@ -18,17 +18,37 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     void this.pool
       .query(
         `
+        CREATE TABLE IF NOT EXISTS public.categories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          icon TEXT,
+          parent_id TEXT REFERENCES public.categories(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS public.venues (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          address TEXT,
+          lat DOUBLE PRECISION,
+          lng DOUBLE PRECISION,
+          phone TEXT,
+          website TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS public.events (
           id TEXT PRIMARY KEY,
           title TEXT,
-          price TEXT,
-          link TEXT,
-          "eventId" TEXT,
-          "dateTime" TEXT,
-          venue TEXT,
-          description TEXT
+          description TEXT,
+          category_id TEXT REFERENCES public.categories(id),
+          venue_id TEXT REFERENCES public.venues(id),
+          date_time TIMESTAMPTZ,
+          price_from NUMERIC(12,2),
+          source_url TEXT
         );
-        CREATE INDEX IF NOT EXISTS idx_events_eventId ON public.events ("eventId");
+
+        CREATE INDEX IF NOT EXISTS idx_events_category ON public.events (category_id);
+        CREATE INDEX IF NOT EXISTS idx_events_venue ON public.events (venue_id);
+        CREATE INDEX IF NOT EXISTS idx_events_date_time ON public.events (date_time);
       `
       )
       .catch(() => {

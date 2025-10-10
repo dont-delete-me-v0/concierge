@@ -202,7 +202,14 @@ export class ConfigurableScraper {
             const context = this.page.context();
             const p = await context.newPage();
             try {
-              await p.goto(href, { timeout, waitUntil: 'domcontentloaded' });
+              const absHref = (() => {
+                try {
+                  return new URL(href, this.config.url).toString();
+                } catch {
+                  return href;
+                }
+              })();
+              await p.goto(absHref, { timeout, waitUntil: 'domcontentloaded' });
               for (const sel of waitFor)
                 await p
                   .waitForSelector(sel, { timeout })

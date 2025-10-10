@@ -12,12 +12,12 @@ import { EventsService } from './events.service.js';
 export interface EventDto {
   id: string; // hash
   title?: string;
-  price?: string;
-  link?: string;
-  eventId?: string;
-  dateTime?: string;
-  venue?: string;
   description?: string;
+  category_id?: string | null;
+  venue_id?: string | null;
+  date_time?: string | null; // ISO UTC
+  price_from?: number | null;
+  source_url?: string | null;
 }
 
 @Controller('events')
@@ -36,12 +36,12 @@ export class EventsController {
 
   @Post()
   create(@Body() dto: EventDto) {
-    return this.events.upsert(dto);
+    return this.events.upsertEvent(dto);
   }
 
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: Omit<EventDto, 'id'>) {
-    return this.events.upsert({ id, ...dto });
+    return this.events.upsertEvent({ id, ...dto });
   }
 
   @Delete(':id')

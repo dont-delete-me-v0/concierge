@@ -1,11 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { parseDateTimeUaToUtcIso } from './dateUtils';
 import {
   computeRowHash,
   loadIncrementalState,
   saveIncrementalState,
 } from './incremental.js';
+import { parsePriceFrom } from './priceUtils';
 import { RabbitPublisher } from './rabbitmq.js';
 import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState.js';
 import { ConfigurableScraper } from './scraper.js';
@@ -62,12 +64,20 @@ async function runOnce(config: ScraperConfig): Promise<void> {
         rows.map(row => ({
           id: computeRowHash(row, fallbackKeys),
           title: row.title,
-          price: row.price,
-          link: row.link,
-          eventId: row.eventId,
-          dateTime: row.dateTime,
-          venue: row.venue,
           description: row.description,
+          // Names for resolution on consumer side
+          category_name:
+            row.category ??
+            row.category_name ??
+            (config.category_name || undefined),
+          venue_name: row.venue ?? row.venue_name,
+          category_id: null,
+          venue_id: null,
+          date_time: parseDateTimeUaToUtcIso(
+            row.dateTime ?? row.date_time ?? ''
+          ),
+          price_from: parsePriceFrom(row.price),
+          source_url: row.link,
         }))
       );
       await publisher.close();
@@ -96,12 +106,19 @@ async function runOnce(config: ScraperConfig): Promise<void> {
         rows.map(row => ({
           id: computeRowHash(row, fallbackKeys),
           title: row.title,
-          price: row.price,
-          link: row.link,
-          eventId: row.eventId,
-          dateTime: row.dateTime,
-          venue: row.venue,
           description: row.description,
+          category_name:
+            row.category ??
+            row.category_name ??
+            (config.category_name || undefined),
+          venue_name: row.venue ?? row.venue_name,
+          category_id: null,
+          venue_id: null,
+          date_time: parseDateTimeUaToUtcIso(
+            row.dateTime ?? row.date_time ?? ''
+          ),
+          price_from: parsePriceFrom(row.price),
+          source_url: row.link,
         }))
       );
       await publisher.close();
@@ -217,7 +234,17 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     }
 
     // Write output: new rows plus optionally updated rows
-    const outputRows = updateExisting ? [...newRows, ...updatedRows] : newRows;
+    // Special case for Redis (no local items to diff): also send existing rows that have description
+    const descriptionUpdateRows: ExtractedRow[] = [];
+    if (updatedItems.length > 0) {
+      for (const { row } of updatedItems) {
+        const desc = (row.description || '').toString().trim();
+        if (desc.length > 0) descriptionUpdateRows.push(row);
+      }
+    }
+    const outputRows = updateExisting
+      ? [...newRows, ...updatedRows, ...descriptionUpdateRows]
+      : [...newRows, ...descriptionUpdateRows];
     const saveOutput =
       String(process.env.CRAWLER_SAVE_OUTPUT || '').toLowerCase() === 'true';
     if (saveOutput) {
@@ -234,12 +261,17 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       outputRows.map(row => ({
         id: computeRowHash(row, uniqueKey),
         title: row.title,
-        price: row.price,
-        link: row.link,
-        eventId: row.eventId,
-        dateTime: row.dateTime,
-        venue: row.venue,
         description: row.description,
+        category_name:
+          row.category ??
+          row.category_name ??
+          (config.category_name || undefined),
+        venue_name: row.venue ?? row.venue_name,
+        category_id: null,
+        venue_id: null,
+        date_time: parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
+        price_from: parsePriceFrom(row.price),
+        source_url: row.link,
       }))
     );
     await publisher.close();

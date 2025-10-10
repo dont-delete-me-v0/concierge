@@ -88,15 +88,40 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         return;
       }
       this.logger.debug(`Processing message id=${payload.id}`);
-      await this.events.upsert({
+      let venueId: string | null = payload.venue_id ?? null;
+      const venueName: string | undefined = payload.venue_name ?? payload.venue;
+      if (
+        !venueId &&
+        typeof venueName === 'string' &&
+        venueName.trim().length
+      ) {
+        venueId = await this.events
+          .upsertVenue({ name: venueName.trim() })
+          .catch(() => null);
+      }
+
+      let categoryId: string | null = payload.category_id ?? null;
+      const categoryName: string | undefined =
+        payload.category_name ?? payload.category;
+      if (
+        !categoryId &&
+        typeof categoryName === 'string' &&
+        categoryName.trim().length
+      ) {
+        categoryId = await this.events
+          .upsertCategory({ name: categoryName.trim() })
+          .catch(() => null);
+      }
+
+      await this.events.upsertEvent({
         id: payload.id,
-        title: payload.title,
-        price: payload.price,
-        link: payload.link,
-        eventId: payload.eventId,
-        dateTime: payload.dateTime,
-        venue: payload.venue,
-        description: payload.description,
+        title: payload.title ?? null,
+        description: payload.description ?? null,
+        category_id: categoryId,
+        venue_id: venueId,
+        date_time: payload.date_time ?? null,
+        price_from: payload.price_from ?? null,
+        source_url: payload.source_url ?? payload.link ?? null,
       });
       this.channel.ack(msg);
       this.logger.debug(`Acked message id=${payload.id}`);
@@ -132,18 +157,56 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         );
         this.logger.log(`✅ Valid events: ${valid.length}/${events.length}`);
 
-        await this.events.upsertMany(
-          valid.map(p => ({
+        // Resolve categories and venues first, then upsert events
+        const resolved = [] as Array<{
+          id: string;
+          title: string | null;
+          description: string | null;
+          category_id: string | null;
+          venue_id: string | null;
+          date_time: string | null;
+          price_from: number | null;
+          source_url: string | null;
+        }>;
+        for (const p of valid) {
+          let venueId: string | null = p.venue_id ?? null;
+          const venueName: string | undefined = p.venue_name ?? p.venue;
+          if (
+            !venueId &&
+            typeof venueName === 'string' &&
+            venueName.trim().length
+          ) {
+            venueId = await this.events
+              .upsertVenue({ name: venueName.trim() })
+              .catch(() => null);
+          }
+
+          let categoryId: string | null = p.category_id ?? null;
+          const categoryName: string | undefined =
+            p.category_name ?? p.category;
+          if (
+            !categoryId &&
+            typeof categoryName === 'string' &&
+            categoryName.trim().length
+          ) {
+            categoryId = await this.events
+              .upsertCategory({ name: categoryName.trim() })
+              .catch(() => null);
+          }
+
+          resolved.push({
             id: p.id,
-            title: p.title,
-            price: p.price,
-            link: p.link,
-            eventId: p.eventId,
-            dateTime: p.dateTime,
-            venue: p.venue,
-            description: p.description,
-          }))
-        );
+            title: p.title ?? null,
+            description: p.description ?? null,
+            category_id: categoryId,
+            venue_id: venueId,
+            date_time: p.date_time ?? null,
+            price_from: p.price_from ?? null,
+            source_url: p.source_url ?? p.link ?? null,
+          });
+        }
+
+        await this.events.upsertMany(resolved);
         for (const m of batch) ch.ack(m);
         this.metrics.totalProcessed += batch.length;
         this.metrics.totalBatches++;
