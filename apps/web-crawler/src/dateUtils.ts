@@ -50,7 +50,7 @@ export function parseDateTimeUaToUtcIso(rawInput: string): string | undefined {
   // 1) dd month yyyy [, dow] [HH:MM] [- HH:MM]
   {
     const m = input.match(
-      /^(\d{1,2})\s+([а-яіїєґ.]+)\s+(\d{4})(?:,?\s*[^\d]*)?(?:\s+(\d{1,2}):(\d{2}))?/i
+      /^(\d{1,2})\s+([а-яіїєґ.]+)\s+(\d{4})(?:,?\s*[^\d]*)?(?:\s+(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?)?/i
     );
     if (m) {
       const day = Number(m[1]);
@@ -58,6 +58,8 @@ export function parseDateTimeUaToUtcIso(rawInput: string): string | undefined {
       const year = Number(m[3]);
       const hour = m[4] ? Number(m[4]) : 0;
       const minute = m[5] ? Number(m[5]) : 0;
+      const endHour = m[6] ? Number(m[6]) : undefined;
+      const endMinute = m[7] ? Number(m[7]) : undefined;
       const month = UA_MONTHS[monName] ?? UA_MONTHS[monName.replace(/\.$/, '')];
       if (month) {
         const dt = DateTime.fromObject(
@@ -126,4 +128,68 @@ export function parseDateTimeUaToUtcIso(rawInput: string): string | undefined {
   }
 
   return undefined;
+}
+
+export function parseDateRangeUaToUtcIso(rawInput: string): {
+  from?: string;
+  to?: string;
+} {
+  const input = sanitize(rawInput);
+  const zone = 'Europe/Kyiv';
+  const now = DateTime.now().setZone(zone);
+
+  // Format: dd month yyyy, dow HH:MM - HH:MM
+  {
+    const m = input.match(
+      /^(\d{1,2})\s+([а-яіїєґ.]+)\s+(\d{4})(?:,?\s*[^\d]*)?\s+(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/i
+    );
+    if (m) {
+      const day = Number(m[1]);
+      const monName = m[2];
+      const year = Number(m[3]);
+      const sh = Number(m[4]);
+      const sm = Number(m[5]);
+      const eh = Number(m[6]);
+      const em = Number(m[7]);
+      const month = UA_MONTHS[monName] ?? UA_MONTHS[monName.replace(/\.$/, '')];
+      if (month) {
+        const start = DateTime.fromObject(
+          { year, month, day, hour: sh, minute: sm },
+          { zone }
+        );
+        const end = DateTime.fromObject(
+          { year, month, day, hour: eh, minute: em },
+          { zone }
+        );
+        return {
+          from: start.isValid
+            ? (start.toUTC().toISO() ?? undefined)
+            : undefined,
+          to: end.isValid ? (end.toUTC().toISO() ?? undefined) : undefined,
+        };
+      }
+    }
+  }
+
+  // Format: dd.mm - dd.mm (no times). Interpret as UTC midnight for both dates.
+  {
+    const m = input.match(
+      /^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s*-\s*(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/
+    );
+    if (m) {
+      const d1 = Number(m[1]);
+      const m1 = Number(m[2]);
+      const y1 = m[3] ? Number(m[3]) : now.year;
+      const d2 = Number(m[4]);
+      const m2 = Number(m[5]);
+      const y2 = m[6] ? Number(m[6]) : now.year;
+      const startUtc = DateTime.utc(y1, m1, d1, 0, 0, 0).toISO();
+      const endUtc = DateTime.utc(y2, m2, d2, 0, 0, 0).toISO();
+      return { from: startUtc ?? undefined, to: endUtc ?? undefined };
+    }
+  }
+
+  // Fallbacks: use start-only parser
+  const one = parseDateTimeUaToUtcIso(rawInput);
+  return { from: one, to: undefined };
 }

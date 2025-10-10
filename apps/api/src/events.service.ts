@@ -25,7 +25,9 @@ export interface EventEntity {
   description?: string | null;
   category_id?: string | null;
   venue_id?: string | null;
-  date_time?: string | null; // ISO UTC
+  date_time?: string | null; // ISO UTC (legacy)
+  date_time_from?: string | null; // ISO UTC
+  date_time_to?: string | null; // ISO UTC
   price_from?: number | null;
   source_url?: string | null;
 }
@@ -85,14 +87,16 @@ export class EventsService {
 
   async upsertEvent(e: EventEntity) {
     const sql = `
-      INSERT INTO public.events (id, title, description, category_id, venue_id, date_time, price_from, source_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO public.events (id, title, description, category_id, venue_id, date_time, date_time_from, date_time_to, price_from, source_url)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
         description = EXCLUDED.description,
         category_id = EXCLUDED.category_id,
         venue_id = EXCLUDED.venue_id,
-        date_time = EXCLUDED.date_time,
+        date_time = COALESCE(EXCLUDED.date_time, EXCLUDED.date_time_from),
+        date_time_from = EXCLUDED.date_time_from,
+        date_time_to = EXCLUDED.date_time_to,
         price_from = EXCLUDED.price_from,
         source_url = EXCLUDED.source_url
       RETURNING *
@@ -104,6 +108,8 @@ export class EventsService {
       e.category_id ?? null,
       e.venue_id ?? null,
       e.date_time ? new Date(e.date_time) : null,
+      e.date_time_from ? new Date(e.date_time_from) : null,
+      e.date_time_to ? new Date(e.date_time_to) : null,
       e.price_from ?? null,
       e.source_url ?? null,
     ];
@@ -120,6 +126,8 @@ export class EventsService {
       'category_id',
       'venue_id',
       'date_time',
+      'date_time_from',
+      'date_time_to',
       'price_from',
       'source_url',
     ];
@@ -129,7 +137,7 @@ export class EventsService {
       const e = events[i];
       const base = i * cols.length;
       valuesSql.push(
-        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10})`
       );
       params.push(
         e.id,
@@ -138,12 +146,14 @@ export class EventsService {
         e.category_id ?? null,
         e.venue_id ?? null,
         e.date_time ? new Date(e.date_time) : null,
+        e.date_time_from ? new Date(e.date_time_from) : null,
+        e.date_time_to ? new Date(e.date_time_to) : null,
         e.price_from ?? null,
         e.source_url ?? null
       );
     }
     const sql = `
-      INSERT INTO public.events (id, title, description, category_id, venue_id, date_time, price_from, source_url)
+      INSERT INTO public.events (id, title, description, category_id, venue_id, date_time, date_time_from, date_time_to, price_from, source_url)
       VALUES ${valuesSql.join(',')}
       ON CONFLICT (id) DO UPDATE SET
         title = EXCLUDED.title,
@@ -151,6 +161,8 @@ export class EventsService {
         category_id = EXCLUDED.category_id,
         venue_id = EXCLUDED.venue_id,
         date_time = EXCLUDED.date_time,
+        date_time_from = EXCLUDED.date_time_from,
+        date_time_to = EXCLUDED.date_time_to,
         price_from = EXCLUDED.price_from,
         source_url = EXCLUDED.source_url
     `;

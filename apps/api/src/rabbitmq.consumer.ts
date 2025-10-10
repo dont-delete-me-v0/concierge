@@ -120,6 +120,8 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         category_id: categoryId,
         venue_id: venueId,
         date_time: payload.date_time ?? null,
+        date_time_from: payload.date_time_from ?? null,
+        date_time_to: payload.date_time_to ?? null,
         price_from: payload.price_from ?? null,
         source_url: payload.source_url ?? payload.link ?? null,
       });
@@ -165,6 +167,8 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
           category_id: string | null;
           venue_id: string | null;
           date_time: string | null;
+          date_time_from: string | null;
+          date_time_to: string | null;
           price_from: number | null;
           source_url: string | null;
         }>;
@@ -201,6 +205,8 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
             category_id: categoryId,
             venue_id: venueId,
             date_time: p.date_time ?? null,
+            date_time_from: p.date_time_from ?? null,
+            date_time_to: p.date_time_to ?? null,
             price_from: p.price_from ?? null,
             source_url: p.source_url ?? p.link ?? null,
           });

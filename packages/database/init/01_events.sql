@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS public.events (
   category_id TEXT REFERENCES public.categories(id),
   venue_id TEXT REFERENCES public.venues(id),
   date_time TIMESTAMPTZ,
+  date_time_from TIMESTAMPTZ,
+  date_time_to TIMESTAMPTZ,
   price_from NUMERIC(12,2),
   source_url TEXT
 );
@@ -33,4 +35,6 @@ CREATE TABLE IF NOT EXISTS public.events (
 CREATE INDEX IF NOT EXISTS idx_events_category ON public.events (category_id);
 CREATE INDEX IF NOT EXISTS idx_events_venue ON public.events (venue_id);
 CREATE INDEX IF NOT EXISTS idx_events_date_time ON public.events (date_time);
+CREATE INDEX IF NOT EXISTS idx_events_date_time_from ON public.events (date_time_from);
+CREATE INDEX IF NOT EXISTS idx_events_date_time_to ON public.events (date_time_to);
 

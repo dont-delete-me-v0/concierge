@@ -8,6 +8,8 @@ export type ExtractType = 'text' | 'attribute' | 'html';
 
 export type TransformType = 'trim' | 'lowercase' | 'uppercase';
 
+export type WaitPolicy = 'present' | 'visible' | 'non-empty';
+
 export interface SelectorConfig {
   name: string;
   selector: string;
@@ -15,6 +17,9 @@ export interface SelectorConfig {
   attribute?: string;
   multiple?: boolean;
   transform?: TransformType;
+  // Optional waiting hints to ensure content is loaded before extraction
+  wait?: WaitPolicy; // present: in DOM; visible: intersecting/visible; non-empty: text/attr not empty
+  required?: boolean; // if true, we'll wait (with timeout) for this selector to satisfy wait policy
 }
 
 export interface BasePaginationConfig {
@@ -153,6 +158,16 @@ export function validateConfig(input: unknown): ValidationResult {
       ) {
         errors.push(
           `selectors[${i}].transform must be one of: trim | lowercase | uppercase`
+        );
+      }
+      if (
+        s.wait !== undefined &&
+        s.wait !== 'present' &&
+        s.wait !== 'visible' &&
+        s.wait !== 'non-empty'
+      ) {
+        errors.push(
+          `selectors[${i}].wait must be one of: present | visible | non-empty`
         );
       }
     }
@@ -380,6 +395,16 @@ export function validateConfig(input: unknown): ValidationResult {
           ) {
             errors.push(
               `details.selectors[${i}].transform must be one of: trim | lowercase | uppercase`
+            );
+          }
+          if (
+            s.wait !== undefined &&
+            s.wait !== 'present' &&
+            s.wait !== 'visible' &&
+            s.wait !== 'non-empty'
+          ) {
+            errors.push(
+              `details.selectors[${i}].wait must be one of: present | visible | non-empty`
             );
           }
         }

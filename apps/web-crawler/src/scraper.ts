@@ -8,7 +8,7 @@ import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { computeRowHash } from './incremental.js';
 import { PaginationHandler } from './pagination.js';
-import type { ExtractedRow, ScraperConfig } from './types.js';
+import type { ExtractedRow, ScraperConfig, SelectorConfig } from './types.js';
 chromium.use(StealthPlugin());
 
 let userAgentSequentialIndex = 0;
@@ -87,6 +87,45 @@ export class ConfigurableScraper {
     );
   }
 
+  private async waitSelectorStable(
+    page: Page,
+    selectorCfg: SelectorConfig,
+    timeout: number
+  ): Promise<void> {
+    const sel = selectorCfg.selector;
+    try {
+      await page.waitForSelector(sel, { timeout });
+    } catch {
+      return;
+    }
+    try {
+      if (selectorCfg.type === 'attribute') {
+        const attr = selectorCfg.attribute || '';
+        await page.waitForFunction(
+          (args: { css: string; attr: string }) => {
+            const el = document.querySelector(args.css) as HTMLElement | null;
+            const val = el?.getAttribute(args.attr || '') || '';
+            return val.replace(/\u00A0/g, ' ').trim().length > 0;
+          },
+          { css: sel, attr },
+          { timeout }
+        );
+      } else {
+        await page.waitForFunction(
+          (css: string) => {
+            const el = document.querySelector(css) as HTMLElement | null;
+            const txt = (el?.textContent || el?.innerHTML || '')
+              .replace(/\u00A0/g, ' ')
+              .trim();
+            return txt.length > 0;
+          },
+          sel,
+          { timeout }
+        );
+      }
+    } catch {}
+  }
+
   async scrape(_existingHashes?: Set<string>): Promise<ExtractedRow[]> {
     if (!this.page) throw new Error('Page not initialized');
     await this.navigate();
@@ -97,6 +136,13 @@ export class ConfigurableScraper {
     console.log('Pagination completed');
 
     console.log('Extracting data...');
+    {
+      const waitTimeout = this.config.timeoutMs ?? 30000;
+      for (const s of this.config.selectors as SelectorConfig[]) {
+        await this.waitSelectorStable(this.page, s, waitTimeout);
+      }
+    }
+
     const extracted = await this.page.evaluate(selectors => {
       /* eslint-disable no-undef */
       const result = {} as Record<string, string | string[] | undefined>;
@@ -214,6 +260,8 @@ export class ConfigurableScraper {
                 await p
                   .waitForSelector(sel, { timeout })
                   .catch(() => undefined);
+              for (const s of detailsCfg.selectors)
+                await this.waitSelectorStable(p, s as SelectorConfig, timeout);
               details = await p.evaluate(selectors => {
                 /* eslint-disable no-undef */
                 const out = {} as Record<string, string | undefined>;
@@ -290,6 +338,12 @@ export class ConfigurableScraper {
                   await newPage
                     .waitForSelector(sel, { timeout })
                     .catch(() => undefined);
+                for (const s of detailsCfg.selectors)
+                  await this.waitSelectorStable(
+                    newPage,
+                    s as SelectorConfig,
+                    timeout
+                  );
                 details = await newPage.evaluate(selectors => {
                   /* eslint-disable no-undef */
                   const out = {} as Record<string, string | undefined>;

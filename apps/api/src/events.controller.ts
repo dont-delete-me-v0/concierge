@@ -15,7 +15,9 @@ export interface EventDto {
   description?: string;
   category_id?: string | null;
   venue_id?: string | null;
-  date_time?: string | null; // ISO UTC
+  date_time?: string | null; // ISO UTC (legacy)
+  date_time_from?: string | null; // ISO UTC
+  date_time_to?: string | null; // ISO UTC
   price_from?: number | null;
   source_url?: string | null;
 }

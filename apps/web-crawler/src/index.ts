@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { parseDateTimeUaToUtcIso } from './dateUtils';
+import { parseDateRangeUaToUtcIso, parseDateTimeUaToUtcIso } from './dateUtils';
 import {
   computeRowHash,
   loadIncrementalState,
@@ -61,24 +61,31 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       const fallbackKeys = rows.length > 0 ? Object.keys(rows[0]).sort() : [];
       const publisher = new RabbitPublisher();
       await publisher.publishMany(
-        rows.map(row => ({
-          id: computeRowHash(row, fallbackKeys),
-          title: row.title,
-          description: row.description,
-          // Names for resolution on consumer side
-          category_name:
-            row.category ??
-            row.category_name ??
-            (config.category_name || undefined),
-          venue_name: row.venue ?? row.venue_name,
-          category_id: null,
-          venue_id: null,
-          date_time: parseDateTimeUaToUtcIso(
-            row.dateTime ?? row.date_time ?? ''
-          ),
-          price_from: parsePriceFrom(row.price),
-          source_url: row.link,
-        }))
+        rows.map(row => {
+          const range = parseDateRangeUaToUtcIso(
+            (row.dateTime ?? row.date_time ?? '').toString()
+          );
+          return {
+            id: computeRowHash(row, fallbackKeys),
+            title: row.title,
+            description: row.description,
+            // Names for resolution on consumer side
+            category_name:
+              row.category ??
+              row.category_name ??
+              (config.category_name || undefined),
+            venue_name: row.venue ?? row.venue_name,
+            category_id: null,
+            venue_id: null,
+            date_time:
+              range.from ||
+              parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
+            date_time_from: range.from,
+            date_time_to: range.to,
+            price_from: parsePriceFrom(row.price),
+            source_url: row.link,
+          };
+        })
       );
       await publisher.close();
       console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
@@ -103,23 +110,30 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       const fallbackKeys = rows.length > 0 ? Object.keys(rows[0]).sort() : [];
       const publisher = new RabbitPublisher();
       await publisher.publishMany(
-        rows.map(row => ({
-          id: computeRowHash(row, fallbackKeys),
-          title: row.title,
-          description: row.description,
-          category_name:
-            row.category ??
-            row.category_name ??
-            (config.category_name || undefined),
-          venue_name: row.venue ?? row.venue_name,
-          category_id: null,
-          venue_id: null,
-          date_time: parseDateTimeUaToUtcIso(
-            row.dateTime ?? row.date_time ?? ''
-          ),
-          price_from: parsePriceFrom(row.price),
-          source_url: row.link,
-        }))
+        rows.map(row => {
+          const range = parseDateRangeUaToUtcIso(
+            (row.dateTime ?? row.date_time ?? '').toString()
+          );
+          return {
+            id: computeRowHash(row, fallbackKeys),
+            title: row.title,
+            description: row.description,
+            category_name:
+              row.category ??
+              row.category_name ??
+              (config.category_name || undefined),
+            venue_name: row.venue ?? row.venue_name,
+            category_id: null,
+            venue_id: null,
+            date_time:
+              range.from ||
+              parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
+            date_time_from: range.from,
+            date_time_to: range.to,
+            price_from: parsePriceFrom(row.price),
+            source_url: row.link,
+          };
+        })
       );
       await publisher.close();
       console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
@@ -258,21 +272,30 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     console.log('📤 Publishing to RabbitMQ...');
     const publisher = new RabbitPublisher();
     await publisher.publishMany(
-      outputRows.map(row => ({
-        id: computeRowHash(row, uniqueKey),
-        title: row.title,
-        description: row.description,
-        category_name:
-          row.category ??
-          row.category_name ??
-          (config.category_name || undefined),
-        venue_name: row.venue ?? row.venue_name,
-        category_id: null,
-        venue_id: null,
-        date_time: parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
-        price_from: parsePriceFrom(row.price),
-        source_url: row.link,
-      }))
+      outputRows.map(row => {
+        const range = parseDateRangeUaToUtcIso(
+          (row.dateTime ?? row.date_time ?? '').toString()
+        );
+        return {
+          id: computeRowHash(row, uniqueKey),
+          title: row.title,
+          description: row.description,
+          category_name:
+            row.category ??
+            row.category_name ??
+            (config.category_name || undefined),
+          venue_name: row.venue ?? row.venue_name,
+          category_id: null,
+          venue_id: null,
+          date_time:
+            range.from ||
+            parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
+          date_time_from: range.from,
+          date_time_to: range.to,
+          price_from: parsePriceFrom(row.price),
+          source_url: row.link,
+        };
+      })
     );
     await publisher.close();
     console.log(

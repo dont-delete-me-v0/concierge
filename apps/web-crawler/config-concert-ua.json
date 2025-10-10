@@ -94,10 +94,11 @@
   "details": {
     "selectors": [
       { "name": "description", "selector": ".event-description", "type": "text", "transform": "trim" },
+      { "name": "description", "selector": ".event-simple-text", "type": "text", "transform": "trim" },
       { "name": "dateTime", "selector": ".event-date", "type": "text", "transform": "trim" },
       { "name": "venue", "selector": ".venue-info", "type": "text", "transform": "trim" }
     ],
-    "waitFor": [".event-description", ".event-date", ".venue-info"],
+    "waitFor": [".event-description", ".event-simple-text", ".event-date", ".venue-info"],
     "maxConcurrency": 5,
     "timeoutMs": 15000
   }
