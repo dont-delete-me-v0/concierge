@@ -100,6 +100,6 @@
     ],
     "waitFor": [".event-description", ".event-simple-text", ".event-date", ".venue-info"],
     "maxConcurrency": 5,
-    "timeoutMs": 15000
+    "timeoutMs": 5000
   }
 }

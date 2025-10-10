@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -11,6 +12,11 @@ import { parsePriceFrom } from './priceUtils';
 import { RabbitPublisher } from './rabbitmq.js';
 import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState.js';
 import { ConfigurableScraper } from './scraper.js';
+import {
+  trackCriticalError,
+  trackProgressEdit,
+  trackProgressStart,
+} from './tracker.js';
 import {
   validateConfig,
   type ExtractedRow,
@@ -37,6 +43,7 @@ async function writeJson(filePath: string, data: unknown): Promise<void> {
 async function runOnce(config: ScraperConfig): Promise<void> {
   console.log('🚀 Starting crawler run...');
   const scraper = new ConfigurableScraper(config);
+  let progressMessageId: number | null = null;
   try {
     console.log('🌐 Initializing browser...');
     await scraper.init();
@@ -44,6 +51,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     const out = config.outputFile ?? 'results.json';
 
     if (!incremental?.enabled) {
+      progressMessageId = await trackProgressStart('⏱️ Parsing started...');
       console.log('📊 Scraping data (no incremental mode)...');
       const rows = await scraper.scrape();
       console.log(`📈 Scraped ${rows.length} rows`);
@@ -89,11 +97,16 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       );
       await publisher.close();
       console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
+      await trackProgressEdit(
+        progressMessageId,
+        `✅ Done: ${rows.length} items published`
+      );
       return;
     }
 
     const uniqueKey = incremental.uniqueKey ?? [];
     if (uniqueKey.length === 0) {
+      progressMessageId = await trackProgressStart('⏱️ Parsing started...');
       console.log('📊 Scraping data (no unique key)...');
       const rows = await scraper.scrape();
       console.log(`📈 Scraped ${rows.length} rows`);
@@ -137,6 +150,10 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       );
       await publisher.close();
       console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
+      await trackProgressEdit(
+        progressMessageId,
+        `✅ Done: ${rows.length} items published`
+      );
       return;
     }
 
@@ -159,6 +176,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       : new Set<string>(existingState?.hashes ?? []);
 
     // Always fully scrape; deduplicate on write
+    progressMessageId = await trackProgressStart('⏱️ Parsing started...');
     console.log('📊 Scraping data...');
     const allRows = await scraper.scrape();
     console.log(`📈 Scraped ${allRows.length} total rows`);
@@ -301,6 +319,10 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     console.log(
       `✅ Published ${outputRows.length} ${updateExisting ? `(new: ${newRows.length}, updated: ${updatedRows.length}) ` : ''}rows to RabbitMQ`
     );
+    await trackProgressEdit(
+      progressMessageId,
+      `✅ Done: ${outputRows.length} ${updateExisting ? `(new: ${newRows.length}, updated: ${updatedRows.length}) ` : ''}published`
+    );
 
     // Build next state
     console.log('💾 Updating state...');
@@ -346,6 +368,13 @@ async function runOnce(config: ScraperConfig): Promise<void> {
         `✅ Updated state with ${newHashes.length} new hashes at state.json (total: ${nextHashes.length})`
       );
     }
+  } catch (err) {
+    try {
+      await trackCriticalError(
+        `❌ Crawler failed: ${(err as Error)?.message ?? String(err)}`
+      );
+    } catch {}
+    throw err;
   } finally {
     await scraper.close();
   }

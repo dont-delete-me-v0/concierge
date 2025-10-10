@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as amqp from 'amqplib';
 import { EventsService } from './events.service';
+import { TelegramService } from './telegram.service';
 
 @Injectable()
 export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
@@ -25,7 +26,10 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
     startTime: Date.now(),
   };
 
-  constructor(private readonly events: EventsService) {}
+  constructor(
+    private readonly events: EventsService,
+    private readonly telegram: TelegramService
+  ) {}
 
   async onModuleInit(): Promise<void> {
     try {
@@ -46,6 +50,9 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
       );
     } catch (err) {
       this.logger.error('❌ Failed to init RabbitMQ consumer', err as Error);
+      void this.telegram
+        .sendMessage(`❌ Consumer init failed: ${(err as Error)?.message}`)
+        .catch(() => undefined);
     }
   }
 
@@ -129,6 +136,11 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
       this.logger.debug(`Acked message id=${payload.id}`);
     } catch (err) {
       this.logger.error('Failed to process message', err as Error);
+      void this.telegram
+        .sendMessage(
+          `❌ Failed processing message: ${(err as Error)?.message ?? String(err)}`
+        )
+        .catch(() => undefined);
       this.channel.nack(msg, false, false); // discard bad message
     }
   }
@@ -220,6 +232,13 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
           `✅ Batch processed: ${batch.length} events saved to DB`
         );
         if (this.metrics.totalBatches % 10 === 0) {
+          void this.telegram
+            .sendMessage(
+              `📊 Consumer stats: processed=${this.metrics.totalProcessed}, batches=${this.metrics.totalBatches}`
+            )
+            .catch(() => undefined);
+        }
+        if (this.metrics.totalBatches % 10 === 0) {
           const uptime = (Date.now() - this.metrics.startTime) / 1000;
           const rate = this.metrics.totalProcessed / (uptime || 1);
           this.logger.log(
@@ -229,6 +248,11 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
       } catch (err) {
         this.metrics.totalErrors++;
         this.logger.error('❌ Batch processing failed', err as Error);
+        void this.telegram
+          .sendMessage(
+            `❌ Batch failed: ${(err as Error)?.message ?? String(err)}`
+          )
+          .catch(() => undefined);
         for (const m of batch) ch.nack(m, false, false);
       }
     };
