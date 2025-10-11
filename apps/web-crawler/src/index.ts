@@ -40,6 +40,22 @@ async function writeJson(filePath: string, data: unknown): Promise<void> {
   await fs.writeFile(abs, JSON.stringify(data, null, 2), 'utf8');
 }
 
+function toAbsoluteUrl(
+  input: string | undefined,
+  baseUrl: string,
+  overrideBase?: string
+): string | undefined {
+  if (!input) return undefined;
+  try {
+    const envBase =
+      overrideBase && overrideBase.length > 0 ? overrideBase : undefined;
+    const base = envBase && envBase.length > 0 ? envBase : baseUrl;
+    return new URL(input, base).toString();
+  } catch {
+    return input;
+  }
+}
+
 async function runOnce(config: ScraperConfig): Promise<void> {
   console.log('🚀 Starting crawler run...');
   const scraper = new ConfigurableScraper(config);
@@ -73,6 +89,11 @@ async function runOnce(config: ScraperConfig): Promise<void> {
           const range = parseDateRangeUaToUtcIso(
             (row.dateTime ?? row.date_time ?? '').toString()
           );
+          const absLink = toAbsoluteUrl(
+            row.link,
+            config.url,
+            config.source_base_url
+          );
           return {
             id: computeRowHash(row, fallbackKeys),
             title: row.title,
@@ -91,7 +112,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
             date_time_from: range.from,
             date_time_to: range.to,
             price_from: parsePriceFrom(row.price),
-            source_url: row.link,
+            source_url: absLink,
           };
         })
       );
@@ -127,6 +148,11 @@ async function runOnce(config: ScraperConfig): Promise<void> {
           const range = parseDateRangeUaToUtcIso(
             (row.dateTime ?? row.date_time ?? '').toString()
           );
+          const absLink = toAbsoluteUrl(
+            row.link,
+            config.url,
+            config.source_base_url
+          );
           return {
             id: computeRowHash(row, fallbackKeys),
             title: row.title,
@@ -144,7 +170,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
             date_time_from: range.from,
             date_time_to: range.to,
             price_from: parsePriceFrom(row.price),
-            source_url: row.link,
+            source_url: absLink,
           };
         })
       );
@@ -294,6 +320,11 @@ async function runOnce(config: ScraperConfig): Promise<void> {
         const range = parseDateRangeUaToUtcIso(
           (row.dateTime ?? row.date_time ?? '').toString()
         );
+        const absLink = toAbsoluteUrl(
+          row.link,
+          config.url,
+          config.source_base_url
+        );
         return {
           id: computeRowHash(row, uniqueKey),
           title: row.title,
@@ -311,7 +342,7 @@ async function runOnce(config: ScraperConfig): Promise<void> {
           date_time_from: range.from,
           date_time_to: range.to,
           price_from: parsePriceFrom(row.price),
-          source_url: row.link,
+          source_url: absLink,
         };
       })
     );

@@ -40,6 +40,7 @@ export interface DetailsConfig {
 
 export interface ScraperConfig {
   url: string;
+  source_base_url?: string;
   waitFor: string | string[];
   pagination?: BasePaginationConfig;
   selectors: SelectorConfig[];
@@ -447,6 +448,7 @@ export function validateConfig(input: unknown): ValidationResult {
 
   const normalized: ScraperConfig = {
     url: obj.url as string,
+    source_base_url: (obj.source_base_url as string | undefined) ?? undefined,
     waitFor: (Array.isArray(waitFor) ? waitFor : (waitFor as string)) as
       | string
       | string[],

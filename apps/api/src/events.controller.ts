@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { EventsService } from './events.service.js';
 
@@ -29,6 +30,41 @@ export class EventsController {
   @Get()
   findAll() {
     return this.events.findAll();
+  }
+
+  @Get('search')
+  search(
+    @Query('q') q?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('limit') limitStr?: string,
+    @Query('offset') offsetStr?: string
+  ) {
+    const limit = Math.min(50, Math.max(1, Number(limitStr ?? 10)));
+    const offset = Math.max(0, Number(offsetStr ?? 0));
+    console.log('[EventsController] /search received:', {
+      q,
+      categoryId,
+      dateFrom,
+      dateTo,
+      limit,
+      offset,
+    });
+    const result = this.events.searchPaginated({
+      q,
+      categoryId,
+      dateFrom,
+      dateTo,
+      limit,
+      offset,
+    });
+    return result;
+  }
+
+  @Get('categories/all')
+  listCategories() {
+    return this.events.listCategories();
   }
 
   @Get(':id')

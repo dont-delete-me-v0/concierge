@@ -188,4 +188,88 @@ export class EventsService {
     await this.db.query('DELETE FROM public.events WHERE id = $1', [id]);
     return { id };
   }
+
+  async listCategories(): Promise<CategoryEntity[]> {
+    const { rows } = await this.db.query(
+      'SELECT id, name, icon, parent_id FROM public.categories ORDER BY name'
+    );
+    return rows as CategoryEntity[];
+  }
+
+  async searchPaginated(input: {
+    q?: string;
+    categoryId?: string;
+    dateFrom?: string; // ISO YYYY-MM-DD
+    dateTo?: string; // ISO YYYY-MM-DD
+    limit: number;
+    offset: number;
+  }): Promise<{ items: EventEntity[]; total: number }> {
+    console.log('[EventsService] searchPaginated input:', input);
+    const where: string[] = [];
+    const params: unknown[] = [];
+    const add = (clause: string, value: unknown) => {
+      params.push(value);
+      where.push(clause.replace('$X', `$${params.length}`));
+    };
+
+    if (input.q && input.q.trim().length > 0) {
+      const like = `%${input.q.trim()}%`;
+      // add two params for title and description separately
+      params.push(like);
+      const p1 = `$${params.length}`;
+      params.push(like);
+      const p2 = `$${params.length}`;
+      where.push(`(title ILIKE ${p1} OR description ILIKE ${p2})`);
+    }
+    if (input.categoryId) {
+      add('category_id = $X', input.categoryId);
+    }
+    if (input.dateFrom) {
+      // Compare by date-only to avoid timezone mismatches
+      where.push(
+        `DATE(COALESCE(date_time_from, date_time, date_time_to)) >= $${
+          params.push(input.dateFrom) && params.length
+        }::date`
+      );
+    }
+    if (input.dateTo) {
+      where.push(
+        `DATE(COALESCE(date_time_from, date_time, date_time_to)) <= $${
+          params.push(input.dateTo) && params.length
+        }::date`
+      );
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const orderSql =
+      'ORDER BY COALESCE(date_time_from, date_time) NULLS LAST, id DESC';
+
+    console.log('[EventsService] whereSql:', whereSql);
+    console.log('[EventsService] params:', params);
+
+    // total
+    const totalSql = `SELECT COUNT(*)::int AS cnt FROM public.events ${whereSql}`;
+    console.log('[EventsService] totalSql:', totalSql);
+    const totalRes = await this.db.query(totalSql, params);
+    const totalRow = (totalRes.rows?.[0] ?? { cnt: 0 }) as { cnt: number };
+    const total = Number(totalRow.cnt ?? 0);
+    console.log('[EventsService] total:', total);
+
+    // items
+    const itemsParams = params.slice();
+    itemsParams.push(input.limit);
+    itemsParams.push(input.offset);
+    const itemsSql = `
+      SELECT * FROM public.events
+      ${whereSql}
+      ${orderSql}
+      LIMIT $${itemsParams.length - 1}
+      OFFSET $${itemsParams.length}
+    `;
+    console.log('[EventsService] itemsSql:', itemsSql);
+    console.log('[EventsService] itemsParams:', itemsParams);
+    const itemsRes = await this.db.query(itemsSql, itemsParams);
+    console.log('[EventsService] returned', itemsRes.rows.length, 'items');
+    return { items: itemsRes.rows as EventEntity[], total };
+  }
 }

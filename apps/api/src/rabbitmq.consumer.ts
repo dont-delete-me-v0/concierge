@@ -120,17 +120,31 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
           .catch(() => null);
       }
 
+      const normalizeUrl = (u?: string | null): string | null => {
+        const raw = u ?? null;
+        if (!raw) return null;
+        try {
+          const base = process.env.SOURCE_BASE_URL;
+          if (base && !/^https?:\/\//i.test(raw)) {
+            return new URL(raw, base).toString();
+          }
+          return new URL(raw).toString();
+        } catch {
+          return raw;
+        }
+      };
+
       await this.events.upsertEvent({
         id: payload.id,
         title: payload.title ?? null,
         description: payload.description ?? null,
-        category_id: categoryId,
-        venue_id: venueId,
+        category_id: categoryId ?? payload.category_id ?? null,
+        venue_id: venueId ?? payload.venue_id ?? null,
         date_time: payload.date_time ?? null,
         date_time_from: payload.date_time_from ?? null,
         date_time_to: payload.date_time_to ?? null,
         price_from: payload.price_from ?? null,
-        source_url: payload.source_url ?? payload.link ?? null,
+        source_url: normalizeUrl(payload.source_url ?? payload.link ?? null),
       });
       this.channel.ack(msg);
       this.logger.debug(`Acked message id=${payload.id}`);
