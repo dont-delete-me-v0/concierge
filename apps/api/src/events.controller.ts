@@ -38,16 +38,22 @@ export class EventsController {
     @Query('categoryId') categoryId?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
+    @Query('priceFrom') priceFromStr?: string,
+    @Query('priceTo') priceToStr?: string,
     @Query('limit') limitStr?: string,
     @Query('offset') offsetStr?: string
   ) {
     const limit = Math.min(50, Math.max(1, Number(limitStr ?? 10)));
     const offset = Math.max(0, Number(offsetStr ?? 0));
+    const priceFrom = priceFromStr ? Number(priceFromStr) : undefined;
+    const priceTo = priceToStr ? Number(priceToStr) : undefined;
     console.log('[EventsController] /search received:', {
       q,
       categoryId,
       dateFrom,
       dateTo,
+      priceFrom,
+      priceTo,
       limit,
       offset,
     });
@@ -56,6 +62,8 @@ export class EventsController {
       categoryId,
       dateFrom,
       dateTo,
+      priceFrom,
+      priceTo,
       limit,
       offset,
     });

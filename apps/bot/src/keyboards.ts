@@ -31,7 +31,11 @@ function truncate(s: string, n: number): string {
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+  return d.toLocaleString('ru-RU', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Europe/Kiev',
+  });
 }
 
 function formatDateOnly(d: Date): string {
@@ -39,7 +43,10 @@ function formatDateOnly(d: Date): string {
 }
 
 function formatTimeOnly(d: Date): string {
-  return d.toLocaleTimeString('ru-RU', { timeStyle: 'short' });
+  return d.toLocaleTimeString('ru-RU', {
+    timeStyle: 'short',
+    timeZone: 'Europe/Kiev',
+  });
 }
 
 function isSameDay(a: Date, b: Date): boolean {

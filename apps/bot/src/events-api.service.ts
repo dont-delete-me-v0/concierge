@@ -18,8 +18,10 @@ export interface SearchParams {
   q?: string;
   categoryId?: string;
   date?: 'today' | 'tomorrow' | 'week' | string; // ISO date
-  dateFrom?: string; // ISO YYYY-MM-DD
-  dateTo?: string; // ISO YYYY-MM-DD
+  dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  dateTo?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  priceFrom?: number;
+  priceTo?: number;
   limit?: number;
   offset?: number;
 }
@@ -69,7 +71,9 @@ export class EventsApiService {
       Boolean(params.q) ||
       Boolean(params.categoryId) ||
       Boolean(params.dateFrom) ||
-      Boolean(params.dateTo);
+      Boolean(params.dateTo) ||
+      params.priceFrom !== undefined ||
+      params.priceTo !== undefined;
 
     console.log('[EventsApiService] search params:', JSON.stringify(params));
     console.log('[EventsApiService] canServerSearch:', canServerSearch);
@@ -81,6 +85,8 @@ export class EventsApiService {
           categoryId: params.categoryId,
           dateFrom: params.dateFrom,
           dateTo: params.dateTo,
+          priceFrom: params.priceFrom,
+          priceTo: params.priceTo,
           limit,
           offset,
         };
@@ -153,6 +159,13 @@ export class EventsApiService {
         if (from && dt < from) return false;
         if (to && dt > to) return false;
       }
+      if (
+        params.priceFrom !== undefined &&
+        (e.price_from ?? 0) < params.priceFrom
+      )
+        return false;
+      if (params.priceTo !== undefined && (e.price_from ?? 0) > params.priceTo)
+        return false;
       return true;
     });
     return {

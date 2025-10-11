@@ -9,7 +9,7 @@ export interface SessionData {
   events?: import('./events-api.service.js').EventItem[];
   currentIndex?: number;
   view?: 'card' | 'list';
-  searchMode?: 'name' | null;
+  searchMode?: 'name' | 'price' | null;
   searchParams?: any; // Last search params for lazy loading
   totalEvents?: number; // Total count from server
 }
@@ -38,7 +38,7 @@ export class BotUpdate {
       'Выберите тип поиска:',
       Markup.keyboard([
         ['По названию', 'По дате'],
-        ['По категории'],
+        ['По категории', 'По цене'],
         ['⬅️ Назад'],
       ]).resize()
     );
@@ -91,6 +91,14 @@ export class BotUpdate {
       );
     }
     await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(rows));
+  }
+
+  @Hears('По цене')
+  async onSearchByPrice(@Ctx() ctx: BotContext) {
+    ctx.session.searchMode = 'price';
+    await ctx.reply(
+      'Введите диапазон цен в формате:\n- 100-500 (от 100 до 500 грн)\n- 200 (от 200 грн)\n- -300 (до 300 грн)'
+    );
   }
 
   @Hears('⚡️ Что сегодня?')
@@ -271,7 +279,7 @@ export class BotUpdate {
       const dateKey = data.slice(4) as 'today' | 'tomorrow' | 'week' | 'manual';
       if (dateKey === 'manual') {
         await ctx.editMessageText(
-          'Введите дату или диапазон в формате:\n- 2025-10-15\n- 2025-10-15 — 2025-10-20',
+          'Введите дату или диапазон в формате:\n- 2025-10-15 (дата)\n- 2025-10-15T14:30 (дата и время)\n- 2025-10-15 — 2025-10-20 (диапазон дат)\n- 2025-10-15T10:00 — 2025-10-15T18:00 (диапазон времени)',
           { parse_mode: undefined }
         );
         // Используем текстовый хэндлер ниже для обработки ввода
@@ -355,19 +363,74 @@ export class BotUpdate {
     const mode = ctx.session.searchMode ?? null;
     const text = String((ctx.message as any)?.text ?? '').trim();
     if (!text || text.startsWith('/')) return;
-    // Manual date input
+    // Manual date input (supports both date and datetime)
     const manualDateMatch = text.match(
-      /^(\d{4}-\d{2}-\d{2})(?:\s*[–—-]\s*(\d{4}-\d{2}-\d{2}))?$/
+      /^(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?)(?:\s*[–—-]\s*(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?))?$/
     );
     if (manualDateMatch) {
       const [, from, to] = manualDateMatch;
-      const searchParams: any = { dateFrom: from, limit: 10, offset: 0 };
-      if (to) searchParams.dateTo = to;
-      else searchParams.dateTo = from;
+      console.log('[BotUpdate] Manual date input - from:', from, 'to:', to);
+
+      // Convert local time to UTC for API
+      const convertToUTC = (localTime: string) => {
+        const date = new Date(localTime);
+        return date.toISOString();
+      };
+
+      const searchParams: any = {
+        dateFrom: convertToUTC(from),
+        limit: 10,
+        offset: 0,
+      };
+      if (to) searchParams.dateTo = convertToUTC(to);
+      else searchParams.dateTo = convertToUTC(from);
+
+      console.log('[BotUpdate] Search params (UTC):', searchParams);
       const { items: events, total } =
         await this.eventsApi.search(searchParams);
       if (!events.length) {
         await ctx.reply('Ничего не найдено для указанной даты/диапазона.');
+        return;
+      }
+      ctx.session.events = events;
+      ctx.session.totalEvents = total;
+      ctx.session.searchParams = searchParams;
+      ctx.session.currentIndex = 0;
+      ctx.session.view = 'card';
+      const first = events[0];
+      await ctx.replyWithHTML(
+        formatEventCard(first),
+        this.buildCardKeyboard(first, 0, total)
+      );
+      return;
+    }
+
+    // Price range input
+    if (mode === 'price') {
+      const priceMatch = text.match(/^(-?\d+)(?:-(-?\d+))?$/);
+      if (!priceMatch) {
+        await ctx.reply(
+          'Неверный формат цены. Используйте: 100-500, 200, или -300'
+        );
+        return;
+      }
+      const [, fromStr, toStr] = priceMatch;
+      const searchParams: any = { limit: 10, offset: 0 };
+      if (fromStr.startsWith('-')) {
+        // Only upper bound: -300 means up to 300
+        searchParams.priceTo = Math.abs(Number(fromStr));
+      } else if (toStr) {
+        // Range: 100-500
+        searchParams.priceFrom = Number(fromStr);
+        searchParams.priceTo = Number(toStr);
+      } else {
+        // Only lower bound: 200 means from 200
+        searchParams.priceFrom = Number(fromStr);
+      }
+      const { items: events, total } =
+        await this.eventsApi.search(searchParams);
+      if (!events.length) {
+        await ctx.reply('Ничего не найдено в указанном ценовом диапазоне.');
         return;
       }
       ctx.session.events = events;

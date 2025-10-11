@@ -199,8 +199,10 @@ export class EventsService {
   async searchPaginated(input: {
     q?: string;
     categoryId?: string;
-    dateFrom?: string; // ISO YYYY-MM-DD
-    dateTo?: string; // ISO YYYY-MM-DD
+    dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+    dateTo?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+    priceFrom?: number;
+    priceTo?: number;
     limit: number;
     offset: number;
   }): Promise<{ items: EventEntity[]; total: number }> {
@@ -225,19 +227,57 @@ export class EventsService {
       add('category_id = $X', input.categoryId);
     }
     if (input.dateFrom) {
-      // Compare by date-only to avoid timezone mismatches
-      where.push(
-        `DATE(COALESCE(date_time_from, date_time, date_time_to)) >= $${
-          params.push(input.dateFrom) && params.length
-        }::date`
-      );
+      // Check if it's a full datetime or just date
+      if (input.dateFrom.includes('T')) {
+        // Full datetime: normalize format and compare with timestamp
+        let normalizedDate = input.dateFrom;
+        // Add seconds if not present (HH:mm -> HH:mm:00)
+        if (normalizedDate.match(/T\d{2}:\d{2}$/)) {
+          normalizedDate += ':00';
+        }
+        console.log('[EventsService] Normalized dateFrom:', normalizedDate);
+        where.push(
+          `COALESCE(date_time_from, date_time) >= $${
+            params.push(normalizedDate) && params.length
+          }::timestamp`
+        );
+      } else {
+        // Date only: compare by date to avoid timezone mismatches
+        where.push(
+          `DATE(COALESCE(date_time_from, date_time, date_time_to)) >= $${
+            params.push(input.dateFrom) && params.length
+          }::date`
+        );
+      }
     }
     if (input.dateTo) {
-      where.push(
-        `DATE(COALESCE(date_time_from, date_time, date_time_to)) <= $${
-          params.push(input.dateTo) && params.length
-        }::date`
-      );
+      if (input.dateTo.includes('T')) {
+        // Full datetime: normalize format and compare with timestamp
+        let normalizedDate = input.dateTo;
+        // Add seconds if not present (HH:mm -> HH:mm:00)
+        if (normalizedDate.match(/T\d{2}:\d{2}$/)) {
+          normalizedDate += ':00';
+        }
+        console.log('[EventsService] Normalized dateTo:', normalizedDate);
+        where.push(
+          `COALESCE(date_time_from, date_time) < $${
+            params.push(normalizedDate) && params.length
+          }::timestamp`
+        );
+      } else {
+        // Date only: compare by date to avoid timezone mismatches
+        where.push(
+          `DATE(COALESCE(date_time_from, date_time, date_time_to)) <= $${
+            params.push(input.dateTo) && params.length
+          }::date`
+        );
+      }
+    }
+    if (input.priceFrom !== undefined) {
+      add('price_from >= $X', input.priceFrom);
+    }
+    if (input.priceTo !== undefined) {
+      add('price_from <= $X', input.priceTo);
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
