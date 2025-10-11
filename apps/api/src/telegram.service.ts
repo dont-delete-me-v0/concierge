@@ -13,10 +13,11 @@ export class TelegramService {
   private readonly chatId: string;
 
   constructor() {
-    const token = process.env.TELEGRAM_BOT_TOKEN || '';
+    // Use TELEGRAM_TRACKER_TOKEN for crawler notifications
+    const token = process.env.TELEGRAM_TRACKER_TOKEN || '';
     this.chatId = process.env.TELEGRAM_CHAT_ID || '';
     if (!token) {
-      this.logger.warn('TELEGRAM_BOT_TOKEN is not set');
+      this.logger.warn('TELEGRAM_TRACKER_TOKEN is not set');
     }
     if (!this.chatId) {
       this.logger.warn('TELEGRAM_CHAT_ID is not set');
