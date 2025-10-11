@@ -10,6 +10,8 @@ export interface SessionData {
   currentIndex?: number;
   view?: 'card' | 'list';
   searchMode?: 'name' | null;
+  searchParams?: any; // Last search params for lazy loading
+  totalEvents?: number; // Total count from server
 }
 
 export type BotContext = Context &
@@ -95,21 +97,26 @@ export class BotUpdate {
   async onToday(@Ctx() ctx: BotContext) {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
-    const events = await this.eventsApi.search({
+    const searchParams = {
       dateFrom: today,
       dateTo: today,
-    });
+      limit: 10,
+      offset: 0,
+    };
+    const { items: events, total } = await this.eventsApi.search(searchParams);
     if (!events.length) {
       await ctx.reply('На сегодня ничего не найдено.');
       return;
     }
     ctx.session.events = events;
+    ctx.session.totalEvents = total;
+    ctx.session.searchParams = searchParams;
     ctx.session.currentIndex = 0;
     ctx.session.view = 'card';
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
-      this.buildCardKeyboard(first, 0, events.length)
+      this.buildCardKeyboard(first, 0, total)
     );
   }
 
@@ -139,19 +146,44 @@ export class BotUpdate {
       return;
     }
 
-    // Navigation: prev/next
+    // Navigation: prev/next with lazy loading
     if (data === 'nav:p' || data === 'nav:n') {
       const events = ctx.session.events ?? [];
-      if (!events.length) return;
+      const total = ctx.session.totalEvents ?? events.length;
       const current = ctx.session.currentIndex ?? 0;
       const nextIndex = data === 'nav:p' ? current - 1 : current + 1;
-      const bounded = Math.max(0, Math.min(events.length - 1, nextIndex));
-      ctx.session.currentIndex = bounded;
+
+      if (nextIndex < 0 || nextIndex >= total) {
+        await ctx.answerCbQuery('Это первая/последняя карточка');
+        return;
+      }
+
+      // Check if we need to load more events
+      if (nextIndex >= events.length || !events[nextIndex]) {
+        const searchParams = ctx.session.searchParams ?? {};
+        const offset = Math.floor(nextIndex / 10) * 10;
+        const { items: newEvents } = await this.eventsApi.search({
+          ...searchParams,
+          limit: 10,
+          offset,
+        });
+        // Merge new events into the existing array
+        if (!ctx.session.events) ctx.session.events = [];
+        for (let i = 0; i < newEvents.length; i++) {
+          ctx.session.events[offset + i] = newEvents[i];
+        }
+      }
+
+      ctx.session.currentIndex = nextIndex;
       ctx.session.view = 'card';
-      const e = events[bounded];
+      const e = (ctx.session.events ?? [])[nextIndex];
+      if (!e) {
+        await ctx.answerCbQuery('Не удалось загрузить событие');
+        return;
+      }
       await ctx.editMessageText(formatEventCard(e), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(e, bounded, events.length),
+        ...this.buildCardKeyboard(e, nextIndex, total),
       });
       await ctx.answerCbQuery();
       return;
@@ -166,13 +198,14 @@ export class BotUpdate {
     }
     if (data === 'view:card') {
       const events = ctx.session.events ?? [];
+      const total = ctx.session.totalEvents ?? events.length;
       const idx = ctx.session.currentIndex ?? 0;
       const e = events[idx];
       if (e) {
         ctx.session.view = 'card';
         await ctx.editMessageText(formatEventCard(e), {
           parse_mode: 'HTML',
-          ...this.buildCardKeyboard(e, idx, events.length),
+          ...this.buildCardKeyboard(e, idx, total),
         });
       }
       await ctx.answerCbQuery();
@@ -183,16 +216,38 @@ export class BotUpdate {
     if (data.startsWith('go:')) {
       const idx = Number(data.slice(3));
       const events = ctx.session.events ?? [];
-      if (Number.isNaN(idx) || idx < 0 || idx >= events.length) {
+      const total = ctx.session.totalEvents ?? events.length;
+      if (Number.isNaN(idx) || idx < 0 || idx >= total) {
         await ctx.answerCbQuery('Элемент недоступен');
         return;
       }
+
+      // Load event if not yet loaded
+      if (!events[idx]) {
+        const offset = Math.floor(idx / 10) * 10;
+        const searchParams = ctx.session.searchParams ?? {};
+        const { items: newEvents } = await this.eventsApi.search({
+          ...searchParams,
+          limit: 10,
+          offset,
+        });
+        // Merge loaded events
+        if (!ctx.session.events) ctx.session.events = [];
+        for (let i = 0; i < newEvents.length; i++) {
+          ctx.session.events[offset + i] = newEvents[i];
+        }
+      }
+
       ctx.session.currentIndex = idx;
       ctx.session.view = 'card';
-      const e = events[idx];
+      const e = (ctx.session.events ?? [])[idx];
+      if (!e) {
+        await ctx.answerCbQuery('Не удалось загрузить событие');
+        return;
+      }
       await ctx.editMessageText(formatEventCard(e), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(e, idx, events.length),
+        ...this.buildCardKeyboard(e, idx, total),
       });
       await ctx.answerCbQuery();
       return;
@@ -243,19 +298,23 @@ export class BotUpdate {
         await ctx.answerCbQuery('Неизвестный фильтр');
         return;
       }
-      const events = await this.eventsApi.search({ dateFrom, dateTo });
+      const searchParams = { dateFrom, dateTo, limit: 10, offset: 0 };
+      const { items: events, total } =
+        await this.eventsApi.search(searchParams);
       if (!events.length) {
         await ctx.editMessageText('Ничего не найдено за выбранный период');
         await ctx.answerCbQuery();
         return;
       }
       ctx.session.events = events;
+      ctx.session.totalEvents = total;
+      ctx.session.searchParams = searchParams;
       ctx.session.currentIndex = 0;
       ctx.session.view = 'card';
       const first = events[0];
       await ctx.editMessageText(formatEventCard(first), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(first, 0, events.length),
+        ...this.buildCardKeyboard(first, 0, total),
       });
       await ctx.answerCbQuery();
       return;
@@ -268,19 +327,23 @@ export class BotUpdate {
         await ctx.answerCbQuery('Категория недоступна');
         return;
       }
-      const events = await this.eventsApi.search({ categoryId: id });
+      const searchParams = { categoryId: id, limit: 10, offset: 0 };
+      const { items: events, total } =
+        await this.eventsApi.search(searchParams);
       if (!events.length) {
         await ctx.editMessageText('В этой категории ничего не найдено');
         await ctx.answerCbQuery();
         return;
       }
       ctx.session.events = events;
+      ctx.session.totalEvents = total;
+      ctx.session.searchParams = searchParams;
       ctx.session.currentIndex = 0;
       ctx.session.view = 'card';
       const first = events[0];
       await ctx.editMessageText(formatEventCard(first), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(first, 0, events.length),
+        ...this.buildCardKeyboard(first, 0, total),
       });
       await ctx.answerCbQuery();
       return;
@@ -298,39 +361,45 @@ export class BotUpdate {
     );
     if (manualDateMatch) {
       const [, from, to] = manualDateMatch;
-      const params: any = { dateFrom: from };
-      if (to) params.dateTo = to;
-      else params.dateTo = from;
-      const events = await this.eventsApi.search(params);
+      const searchParams: any = { dateFrom: from, limit: 10, offset: 0 };
+      if (to) searchParams.dateTo = to;
+      else searchParams.dateTo = from;
+      const { items: events, total } =
+        await this.eventsApi.search(searchParams);
       if (!events.length) {
         await ctx.reply('Ничего не найдено для указанной даты/диапазона.');
         return;
       }
       ctx.session.events = events;
+      ctx.session.totalEvents = total;
+      ctx.session.searchParams = searchParams;
       ctx.session.currentIndex = 0;
       ctx.session.view = 'card';
       const first = events[0];
       await ctx.replyWithHTML(
         formatEventCard(first),
-        this.buildCardKeyboard(first, 0, events.length)
+        this.buildCardKeyboard(first, 0, total)
       );
       return;
     }
 
     if (mode !== 'name') return;
-    const events = await this.eventsApi.search({ q: text });
+    const searchParams = { q: text, limit: 10, offset: 0 };
+    const { items: events, total } = await this.eventsApi.search(searchParams);
     if (!events.length) {
       await ctx.reply('Ничего не найдено. Попробуйте уточнить запрос.');
       return;
     }
 
     ctx.session.events = events;
+    ctx.session.totalEvents = total;
+    ctx.session.searchParams = searchParams;
     ctx.session.currentIndex = 0;
     ctx.session.view = 'card';
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
-      this.buildCardKeyboard(first, 0, events.length)
+      this.buildCardKeyboard(first, 0, total)
     );
   }
 
@@ -355,12 +424,39 @@ export class BotUpdate {
   }
 
   private async renderList(ctx: BotContext, page: number) {
-    const events = ctx.session.events ?? [];
+    const total = ctx.session.totalEvents ?? ctx.session.events?.length ?? 0;
     const pageSize = 5;
-    const totalPages = Math.max(1, Math.ceil(events.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const bounded = Math.max(0, Math.min(totalPages - 1, page));
     const start = bounded * pageSize;
-    const slice = events.slice(start, start + pageSize);
+    const end = Math.min(start + pageSize, total);
+
+    // Load events for this page if not yet loaded
+    if (!ctx.session.events) ctx.session.events = [];
+    for (let i = start; i < end; i++) {
+      if (!ctx.session.events[i]) {
+        // Need to load this event
+        const offset = Math.floor(i / 10) * 10;
+        const searchParams = ctx.session.searchParams ?? {};
+        const { items: newEvents } = await this.eventsApi.search({
+          ...searchParams,
+          limit: 10,
+          offset,
+        });
+        // Merge loaded events
+        for (let j = 0; j < newEvents.length; j++) {
+          ctx.session.events[offset + j] = newEvents[j];
+        }
+      }
+    }
+
+    // Get events for current page
+    const slice: any[] = [];
+    for (let i = start; i < end; i++) {
+      const e = ctx.session.events[i];
+      if (e) slice.push(e);
+    }
+
     const lines = slice.map((e, i) => {
       const num = start + i + 1;
       const date = e.date_time_from ?? e.date_time ?? e.date_time_to;
@@ -372,7 +468,7 @@ export class BotUpdate {
         : '';
       return `${num}. ${e.title ?? 'Без названия'}${dateStr ? ` — ${dateStr}` : ''}`;
     });
-    const header = `Найдено: ${events.length}\nСтраница ${bounded + 1}/${totalPages}`;
+    const header = `Найдено: ${total}\nСтраница ${bounded + 1}/${totalPages}`;
     const text = [header, '', ...lines].join('\n');
 
     // Build number buttons for this page

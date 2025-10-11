@@ -60,8 +60,10 @@ export class EventsApiService {
     }
   }
 
-  async search(params: SearchParams): Promise<EventItem[]> {
-    const limit = params.limit ?? 50;
+  async search(
+    params: SearchParams
+  ): Promise<{ items: EventItem[]; total: number }> {
+    const limit = params.limit ?? 10;
     const offset = params.offset ?? 0;
     const canServerSearch =
       Boolean(params.q) ||
@@ -91,8 +93,14 @@ export class EventsApiService {
         });
         console.log('[EventsApiService] response data:', JSON.stringify(data));
         const items = (data?.items as EventItem[]) ?? [];
-        console.log('[EventsApiService] returning', items.length, 'items');
-        return items;
+        const total = (data?.total as number) ?? items.length;
+        console.log(
+          '[EventsApiService] returning',
+          items.length,
+          'items, total:',
+          total
+        );
+        return { items, total };
       } catch (err) {
         console.error('[EventsApiService] Server search failed:', err);
         if (err && typeof err === 'object' && 'response' in err) {
@@ -101,12 +109,12 @@ export class EventsApiService {
             (err as any).response?.data
           );
         }
-        return [];
+        return { items: [], total: 0 };
       }
     }
     const items = await this.all();
     const now = new Date();
-    return items.filter(e => {
+    const filtered = items.filter(e => {
       const title = (e.title ?? '').toLowerCase();
       if (params.q && !title.includes(params.q.toLowerCase())) return false;
       if (params.categoryId && e.category_id !== params.categoryId)
@@ -147,6 +155,10 @@ export class EventsApiService {
       }
       return true;
     });
+    return {
+      items: filtered.slice(offset, offset + limit),
+      total: filtered.length,
+    };
   }
 
   tokenForEventId(id: string): string {
