@@ -392,31 +392,45 @@ export class BotUpdate {
           profileLines.push('Предпочтения не настроены');
         }
 
-        await ctx.editMessageText(profileLines.join('\n'), {
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '📱 Изменить телефон',
-                  callback_data: 'profile:edit:phone',
-                },
-                {
-                  text: '📧 Изменить email',
-                  callback_data: 'profile:edit:email',
-                },
+        // Добавляем timestamp для избежания ошибки "message is not modified"
+        const currentTime = new Date().toLocaleTimeString('ru-RU');
+        profileLines.push('', `🔄 Обновлено: ${currentTime}`);
+
+        try {
+          await ctx.editMessageText(profileLines.join('\n'), {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '📱 Изменить телефон',
+                    callback_data: 'profile:edit:phone',
+                  },
+                  {
+                    text: '📧 Изменить email',
+                    callback_data: 'profile:edit:email',
+                  },
+                ],
+                [
+                  {
+                    text: '⚙️ Предпочтения',
+                    callback_data: 'profile:prefs:view',
+                  },
+                ],
+                [{ text: '🔄 Обновить', callback_data: 'profile:refresh' }],
               ],
-              [
-                {
-                  text: '⚙️ Предпочтения',
-                  callback_data: 'profile:prefs:view',
-                },
-              ],
-              [{ text: '🔄 Обновить', callback_data: 'profile:refresh' }],
-            ],
-          },
-        });
-        await ctx.answerCbQuery('Обновлено');
+            },
+          });
+          await ctx.answerCbQuery('Обновлено');
+        } catch (error: any) {
+          // Если сообщение не изменилось, просто показываем уведомление
+          if (error.description?.includes('message is not modified')) {
+            await ctx.answerCbQuery('Профиль уже актуален');
+          } else {
+            console.error('[Profile Refresh] Error:', error);
+            await ctx.answerCbQuery('Ошибка при обновлении');
+          }
+        }
         return;
       }
 
@@ -462,62 +476,87 @@ export class BotUpdate {
           prefsLines.push('Предпочтения не настроены');
         }
 
-        await ctx.editMessageText(prefsLines.join('\n'), {
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: '🎭 Изменить категории',
-                  callback_data: 'profile:edit:categories',
-                },
+        try {
+          await ctx.editMessageText(prefsLines.join('\n'), {
+            parse_mode: 'HTML',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: '🎭 Изменить категории',
+                    callback_data: 'profile:edit:categories',
+                  },
+                ],
+                [
+                  {
+                    text: '💰 Изменить цены',
+                    callback_data: 'profile:edit:price',
+                  },
+                ],
+                [
+                  {
+                    text: '◀️ Назад к профилю',
+                    callback_data: 'profile:refresh',
+                  },
+                ],
               ],
-              [
-                {
-                  text: '💰 Изменить цены',
-                  callback_data: 'profile:edit:price',
-                },
-              ],
-              [
-                {
-                  text: '◀️ Назад к профилю',
-                  callback_data: 'profile:refresh',
-                },
-              ],
-            ],
-          },
-        });
-        await ctx.answerCbQuery();
+            },
+          });
+          await ctx.answerCbQuery();
+        } catch (error: any) {
+          // Если сообщение не изменилось, просто показываем уведомление
+          if (error.description?.includes('message is not modified')) {
+            await ctx.answerCbQuery('Предпочтения уже актуальны');
+          } else {
+            console.error('[Profile Prefs] Error:', error);
+            await ctx.answerCbQuery('Ошибка при загрузке предпочтений');
+          }
+        }
         return;
       }
 
       if (profileAction === 'edit') {
         if (subAction === 'phone') {
           ctx.session.profileEditMode = 'phone';
-          await ctx.editMessageText(
-            'Введите ваш номер телефона в формате +380XXXXXXXXX:'
-          );
-          await ctx.answerCbQuery();
+          try {
+            await ctx.editMessageText(
+              'Введите ваш номер телефона в формате +380XXXXXXXXX:'
+            );
+            await ctx.answerCbQuery();
+          } catch (error: any) {
+            console.error('[Profile Edit Phone] Error:', error);
+            await ctx.answerCbQuery('Ошибка при открытии редактора телефона');
+          }
           return;
         }
 
         if (subAction === 'email') {
           ctx.session.profileEditMode = 'email';
-          await ctx.editMessageText('Введите ваш email:');
-          await ctx.answerCbQuery();
+          try {
+            await ctx.editMessageText('Введите ваш email:');
+            await ctx.answerCbQuery();
+          } catch (error: any) {
+            console.error('[Profile Edit Email] Error:', error);
+            await ctx.answerCbQuery('Ошибка при открытии редактора email');
+          }
           return;
         }
 
         if (subAction === 'price') {
           ctx.session.profileEditMode = 'price';
-          await ctx.editMessageText(
-            'Введите диапазон цен в формате:\n' +
-              '- 100-500 (от 100 до 500 грн)\n' +
-              '- 200 (от 200 грн)\n' +
-              '- -300 (до 300 грн)\n' +
-              '- 0 (сбросить)'
-          );
-          await ctx.answerCbQuery();
+          try {
+            await ctx.editMessageText(
+              'Введите диапазон цен в формате:\n' +
+                '- 100-500 (от 100 до 500 грн)\n' +
+                '- 200 (от 200 грн)\n' +
+                '- -300 (до 300 грн)\n' +
+                '- 0 (сбросить)'
+            );
+            await ctx.answerCbQuery();
+          } catch (error: any) {
+            console.error('[Profile Edit Price] Error:', error);
+            await ctx.answerCbQuery('Ошибка при открытии редактора цен');
+          }
           return;
         }
 
@@ -557,10 +596,15 @@ export class BotUpdate {
             { text: '❌ Отмена', callback_data: 'profile:prefs:view' },
           ]);
 
-          await ctx.editMessageText('Выберите интересующие категории:', {
-            reply_markup: { inline_keyboard: rows },
-          });
-          await ctx.answerCbQuery();
+          try {
+            await ctx.editMessageText('Выберите интересующие категории:', {
+              reply_markup: { inline_keyboard: rows },
+            });
+            await ctx.answerCbQuery();
+          } catch (error: any) {
+            console.error('[Profile Edit Categories] Error:', error);
+            await ctx.answerCbQuery('Ошибка при открытии редактора категорий');
+          }
           return;
         }
       }
@@ -632,8 +676,16 @@ export class BotUpdate {
           ctx.session.profileEditMode = null;
           ctx.session.tempCategorySelection = undefined;
           ctx.session.categoriesList = undefined; // Очищаем список категорий
-          await ctx.editMessageText('✅ Предпочтения по категориям сохранены!');
-          await ctx.answerCbQuery();
+
+          try {
+            await ctx.editMessageText(
+              '✅ Предпочтения по категориям сохранены!'
+            );
+            await ctx.answerCbQuery();
+          } catch (error: any) {
+            console.error('[Category Save] Error:', error);
+            await ctx.answerCbQuery('Предпочтения сохранены');
+          }
 
           // Показываем обновленное меню предпочтений через секунду
           setTimeout(async () => {
@@ -1093,8 +1145,8 @@ export class BotUpdate {
       if (text === '0') {
         const success = await this.userService.updatePricePreferences(
           telegramId,
-          undefined,
-          undefined
+          null,
+          null
         );
         if (success) {
           ctx.session.profileEditMode = null;

@@ -279,8 +279,8 @@ export class UserService {
     preferences: {
       category_ids?: string[];
       district_ids?: string[];
-      price_min?: number;
-      price_max?: number;
+      price_min?: number | null;
+      price_max?: number | null;
     }
   ): Promise<boolean> {
     try {
@@ -292,14 +292,18 @@ export class UserService {
 
       const { category_ids, district_ids, price_min, price_max } = preferences;
 
+      // Флаги для определения, нужно ли обновлять цены
+      const updatePriceMin = price_min !== undefined;
+      const updatePriceMax = price_max !== undefined;
+
       await this.db.query(
         `INSERT INTO user_preferences (user_id, category_ids, district_ids, price_min, price_max)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (user_id) DO UPDATE SET
            category_ids = COALESCE($2, user_preferences.category_ids),
            district_ids = COALESCE($3, user_preferences.district_ids),
-           price_min = COALESCE($4, user_preferences.price_min),
-           price_max = COALESCE($5, user_preferences.price_max),
+           price_min = CASE WHEN $6 = true THEN $4 ELSE user_preferences.price_min END,
+           price_max = CASE WHEN $7 = true THEN $5 ELSE user_preferences.price_max END,
            updated_at = NOW()`,
         [
           user.id,
@@ -307,6 +311,8 @@ export class UserService {
           district_ids || null,
           price_min !== undefined ? price_min : null,
           price_max !== undefined ? price_max : null,
+          updatePriceMin,
+          updatePriceMax,
         ]
       );
 
@@ -347,8 +353,8 @@ export class UserService {
    */
   async updatePricePreferences(
     telegramId: string,
-    priceMin?: number,
-    priceMax?: number
+    priceMin?: number | null,
+    priceMax?: number | null
   ): Promise<boolean> {
     return this.upsertUserPreferences(telegramId, {
       price_min: priceMin,
