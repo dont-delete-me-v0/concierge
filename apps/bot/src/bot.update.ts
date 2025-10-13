@@ -12,6 +12,7 @@ export interface SessionData {
   searchMode?: 'name' | 'price' | 'venue' | null;
   searchParams?: any; // Last search params for lazy loading
   totalEvents?: number; // Total count from server
+  searchToken?: string; // isolates pagination callbacks per search
 }
 
 export type BotContext = Context &
@@ -23,6 +24,10 @@ export class BotUpdate {
     private readonly eventsApi: EventsApiService,
     @InjectBot() private readonly bot: any
   ) {}
+
+  private generateSearchToken(): string {
+    return Math.random().toString(36).slice(2, 10);
+  }
 
   @Start()
   async onStart(@Ctx() ctx: BotContext) {
@@ -65,13 +70,15 @@ export class BotUpdate {
 
   @Hears('По дате')
   async onSearchByDate(@Ctx() ctx: BotContext) {
+    const token = this.generateSearchToken();
+    ctx.session.searchToken = token;
     await ctx.reply(
       'Выберите период:',
       Markup.inlineKeyboard([
-        [Markup.button.callback('Сегодня', 's:d:today')],
-        [Markup.button.callback('Завтра', 's:d:tomorrow')],
-        [Markup.button.callback('7 дней', 's:d:week')],
-        [Markup.button.callback('Ввести вручную', 's:d:manual')],
+        [Markup.button.callback('Сегодня', `s:${token}:d:today`)],
+        [Markup.button.callback('Завтра', `s:${token}:d:tomorrow`)],
+        [Markup.button.callback('7 дней', `s:${token}:d:week`)],
+        [Markup.button.callback('Ввести вручную', `s:${token}:d:manual`)],
       ])
     );
   }
@@ -83,6 +90,8 @@ export class BotUpdate {
       await ctx.reply('Категории не найдены');
       return;
     }
+    const searchToken = this.generateSearchToken();
+    ctx.session.searchToken = searchToken;
     // Chunk categories into rows of 2-3 buttons
     const rows: any[] = [];
     const tokens: string[] = [];
@@ -94,7 +103,12 @@ export class BotUpdate {
       rows.push(
         cats
           .slice(i, i + 3)
-          .map((c, j) => Markup.button.callback(c.name, `s:c:${tokens[i + j]}`))
+          .map((c, j) =>
+            Markup.button.callback(
+              c.name,
+              `s:${searchToken}:c:${tokens[i + j]}`
+            )
+          )
       );
     }
     await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(rows));
@@ -128,10 +142,11 @@ export class BotUpdate {
     ctx.session.searchParams = searchParams;
     ctx.session.currentIndex = 0;
     ctx.session.view = 'card';
+    ctx.session.searchToken = this.generateSearchToken();
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
-      this.buildCardKeyboard(first, 0, total)
+      this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
     );
   }
 
@@ -156,17 +171,31 @@ export class BotUpdate {
       return;
     }
 
-    if (data === 'noop') {
+    // Tokenized callbacks to avoid cross-search interference
+    let action = data;
+    let args: string[] = [];
+    if (data.startsWith('t:')) {
+      const parts = data.split(':');
+      const token = parts[1];
+      if (!token || token !== (ctx.session.searchToken ?? '')) {
+        await ctx.answerCbQuery('Сессия поиска устарела');
+        return;
+      }
+      action = parts[2] ?? '';
+      args = parts.slice(3);
+    }
+
+    if (action === 'noop') {
       await ctx.answerCbQuery();
       return;
     }
 
     // Navigation: prev/next with lazy loading
-    if (data === 'nav:p' || data === 'nav:n') {
+    if (action === 'nav' && (args[0] === 'p' || args[0] === 'n')) {
       const events = ctx.session.events ?? [];
       const total = ctx.session.totalEvents ?? events.length;
       const current = ctx.session.currentIndex ?? 0;
-      const nextIndex = data === 'nav:p' ? current - 1 : current + 1;
+      const nextIndex = args[0] === 'p' ? current - 1 : current + 1;
 
       if (nextIndex < 0 || nextIndex >= total) {
         await ctx.answerCbQuery('Это первая/последняя карточка');
@@ -198,20 +227,25 @@ export class BotUpdate {
       }
       await ctx.editMessageText(formatEventCard(e), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(e, nextIndex, total),
+        ...this.buildCardKeyboard(
+          e,
+          nextIndex,
+          total,
+          ctx.session.searchToken ?? ''
+        ),
       });
       await ctx.answerCbQuery();
       return;
     }
 
     // Switch view: list or card
-    if (data === 'view:list') {
+    if (action === 'view' && args[0] === 'list') {
       ctx.session.view = 'list';
       await this.renderList(ctx, 0);
       await ctx.answerCbQuery();
       return;
     }
-    if (data === 'view:card') {
+    if (action === 'view' && args[0] === 'card') {
       const events = ctx.session.events ?? [];
       const total = ctx.session.totalEvents ?? events.length;
       const idx = ctx.session.currentIndex ?? 0;
@@ -220,7 +254,12 @@ export class BotUpdate {
         ctx.session.view = 'card';
         await ctx.editMessageText(formatEventCard(e), {
           parse_mode: 'HTML',
-          ...this.buildCardKeyboard(e, idx, total),
+          ...this.buildCardKeyboard(
+            e,
+            idx,
+            total,
+            ctx.session.searchToken ?? ''
+          ),
         });
       }
       await ctx.answerCbQuery();
@@ -228,8 +267,8 @@ export class BotUpdate {
     }
 
     // List navigation go to item index
-    if (data.startsWith('go:')) {
-      const idx = Number(data.slice(3));
+    if (action === 'go') {
+      const idx = Number(args[0]);
       const events = ctx.session.events ?? [];
       const total = ctx.session.totalEvents ?? events.length;
       if (Number.isNaN(idx) || idx < 0 || idx >= total) {
@@ -262,16 +301,15 @@ export class BotUpdate {
       }
       await ctx.editMessageText(formatEventCard(e), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(e, idx, total),
+        ...this.buildCardKeyboard(e, idx, total, ctx.session.searchToken ?? ''),
       });
       await ctx.answerCbQuery();
       return;
     }
 
     // List page navigation
-    if (data.startsWith('list:')) {
-      const parts = data.split(':');
-      const next = Number(parts[2]);
+    if (action === 'list') {
+      const next = Number(args[1] ?? args[0]);
       if (!Number.isFinite(next)) {
         await ctx.answerCbQuery('Страница недоступна');
         return;
@@ -281,87 +319,102 @@ export class BotUpdate {
       return;
     }
 
-    // Search by date actions
-    if (data.startsWith('s:d:')) {
-      const dateKey = data.slice(4) as 'today' | 'tomorrow' | 'week' | 'manual';
-      if (dateKey === 'manual') {
-        await ctx.editMessageText(
-          'Введите дату или диапазон в формате:\n- 2025-10-15 (дата)\n- 2025-10-15T14:30 (дата и время)\n- 2025-10-15 — 2025-10-20 (диапазон дат)\n- 2025-10-15T10:00 — 2025-10-15T18:00 (диапазон времени)',
-          { parse_mode: undefined }
-        );
-        // Используем текстовый хэндлер ниже для обработки ввода
+    // Search by date actions with token validation
+    if (data.startsWith('s:')) {
+      const parts = data.split(':');
+      if (parts.length >= 3 && parts[2] === 'd') {
+        const token = parts[1];
+        if (token !== (ctx.session.searchToken ?? '')) {
+          await ctx.answerCbQuery('Сессия поиска устарела');
+          return;
+        }
+        const dateKey = parts[3] as 'today' | 'tomorrow' | 'week' | 'manual';
+        if (dateKey === 'manual') {
+          await ctx.editMessageText(
+            'Введите дату или диапазон в формате:\n- 2025-10-15 (дата)\n- 2025-10-15T14:30 (дата и время)\n- 2025-10-15 — 2025-10-20 (диапазон дат)\n- 2025-10-15T10:00 — 2025-10-15T18:00 (диапазон времени)',
+            { parse_mode: undefined }
+          );
+          // Используем текстовый хэндлер ниже для обработки ввода
+          await ctx.answerCbQuery();
+          return;
+        }
+        const now = new Date();
+        let dateFrom: string;
+        let dateTo: string;
+        if (dateKey === 'today') {
+          dateFrom = now.toISOString().split('T')[0];
+          dateTo = dateFrom;
+        } else if (dateKey === 'tomorrow') {
+          const t = new Date(now);
+          t.setDate(now.getDate() + 1);
+          dateFrom = t.toISOString().split('T')[0];
+          dateTo = dateFrom;
+        } else if (dateKey === 'week') {
+          dateFrom = now.toISOString().split('T')[0];
+          const week = new Date(now);
+          week.setDate(now.getDate() + 7);
+          dateTo = week.toISOString().split('T')[0];
+        } else {
+          await ctx.answerCbQuery('Неизвестный фильтр');
+          return;
+        }
+        const searchParams = { dateFrom, dateTo, limit: 10, offset: 0 };
+        const { items: events, total } =
+          await this.eventsApi.search(searchParams);
+        if (!events.length) {
+          await ctx.editMessageText('Ничего не найдено за выбранный период');
+          await ctx.answerCbQuery();
+          return;
+        }
+        ctx.session.events = events;
+        ctx.session.totalEvents = total;
+        ctx.session.searchParams = searchParams;
+        ctx.session.currentIndex = 0;
+        ctx.session.view = 'card';
+        ctx.session.searchToken = this.generateSearchToken();
+        const first = events[0];
+        await ctx.editMessageText(formatEventCard(first), {
+          parse_mode: 'HTML',
+          ...this.buildCardKeyboard(first, 0, total, ctx.session.searchToken),
+        });
         await ctx.answerCbQuery();
         return;
       }
-      const now = new Date();
-      let dateFrom: string;
-      let dateTo: string;
-      if (dateKey === 'today') {
-        dateFrom = now.toISOString().split('T')[0];
-        dateTo = dateFrom;
-      } else if (dateKey === 'tomorrow') {
-        const t = new Date(now);
-        t.setDate(now.getDate() + 1);
-        dateFrom = t.toISOString().split('T')[0];
-        dateTo = dateFrom;
-      } else if (dateKey === 'week') {
-        dateFrom = now.toISOString().split('T')[0];
-        const week = new Date(now);
-        week.setDate(now.getDate() + 7);
-        dateTo = week.toISOString().split('T')[0];
-      } else {
-        await ctx.answerCbQuery('Неизвестный фильтр');
-        return;
-      }
-      const searchParams = { dateFrom, dateTo, limit: 10, offset: 0 };
-      const { items: events, total } =
-        await this.eventsApi.search(searchParams);
-      if (!events.length) {
-        await ctx.editMessageText('Ничего не найдено за выбранный период');
-        await ctx.answerCbQuery();
-        return;
-      }
-      ctx.session.events = events;
-      ctx.session.totalEvents = total;
-      ctx.session.searchParams = searchParams;
-      ctx.session.currentIndex = 0;
-      ctx.session.view = 'card';
-      const first = events[0];
-      await ctx.editMessageText(formatEventCard(first), {
-        parse_mode: 'HTML',
-        ...this.buildCardKeyboard(first, 0, total),
-      });
-      await ctx.answerCbQuery();
-      return;
-    }
 
-    if (data.startsWith('s:c:')) {
-      const token = data.slice(4);
-      const id = this.eventsApi.resolveEventId(token);
-      if (!id) {
-        await ctx.answerCbQuery('Категория недоступна');
-        return;
-      }
-      const searchParams = { categoryId: id, limit: 10, offset: 0 };
-      const { items: events, total } =
-        await this.eventsApi.search(searchParams);
-      if (!events.length) {
-        await ctx.editMessageText('В этой категории ничего не найдено');
+      if (parts.length >= 3 && parts[2] === 'c') {
+        const token = parts[1];
+        if (token !== (ctx.session.searchToken ?? '')) {
+          await ctx.answerCbQuery('Сессия поиска устарела');
+          return;
+        }
+        const catToken = parts[3];
+        const id = this.eventsApi.resolveEventId(catToken);
+        if (!id) {
+          await ctx.answerCbQuery('Категория недоступна');
+          return;
+        }
+        const searchParams = { categoryId: id, limit: 10, offset: 0 };
+        const { items: events, total } =
+          await this.eventsApi.search(searchParams);
+        if (!events.length) {
+          await ctx.editMessageText('В этой категории ничего не найдено');
+          await ctx.answerCbQuery();
+          return;
+        }
+        ctx.session.events = events;
+        ctx.session.totalEvents = total;
+        ctx.session.searchParams = searchParams;
+        ctx.session.currentIndex = 0;
+        ctx.session.view = 'card';
+        ctx.session.searchToken = this.generateSearchToken();
+        const first = events[0];
+        await ctx.editMessageText(formatEventCard(first), {
+          parse_mode: 'HTML',
+          ...this.buildCardKeyboard(first, 0, total, ctx.session.searchToken),
+        });
         await ctx.answerCbQuery();
         return;
       }
-      ctx.session.events = events;
-      ctx.session.totalEvents = total;
-      ctx.session.searchParams = searchParams;
-      ctx.session.currentIndex = 0;
-      ctx.session.view = 'card';
-      const first = events[0];
-      await ctx.editMessageText(formatEventCard(first), {
-        parse_mode: 'HTML',
-        ...this.buildCardKeyboard(first, 0, total),
-      });
-      await ctx.answerCbQuery();
-      return;
     }
   }
 
@@ -404,10 +457,11 @@ export class BotUpdate {
       ctx.session.searchParams = searchParams;
       ctx.session.currentIndex = 0;
       ctx.session.view = 'card';
+      ctx.session.searchToken = this.generateSearchToken();
       const first = events[0];
       await ctx.replyWithHTML(
         formatEventCard(first),
-        this.buildCardKeyboard(first, 0, total)
+        this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
       );
       return;
     }
@@ -445,10 +499,11 @@ export class BotUpdate {
       ctx.session.searchParams = searchParams;
       ctx.session.currentIndex = 0;
       ctx.session.view = 'card';
+      ctx.session.searchToken = this.generateSearchToken();
       const first = events[0];
       await ctx.replyWithHTML(
         formatEventCard(first),
-        this.buildCardKeyboard(first, 0, total)
+        this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
       );
       return;
     }
@@ -469,24 +524,27 @@ export class BotUpdate {
     ctx.session.searchParams = searchParams;
     ctx.session.currentIndex = 0;
     ctx.session.view = 'card';
+    ctx.session.searchToken = this.generateSearchToken();
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
-      this.buildCardKeyboard(first, 0, total)
+      this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
     );
   }
 
   private buildCardKeyboard(
     e: import('./events-api.service.js').EventItem,
     index: number,
-    total: number
+    total: number,
+    token?: string
   ) {
+    const t = token ? `t:${token}:` : '';
     const navRow = [
-      Markup.button.callback('◀️', 'nav:p'),
-      Markup.button.callback(`${index + 1}/${total}`, 'noop'),
-      Markup.button.callback('▶️', 'nav:n'),
+      Markup.button.callback('◀️', `${t}nav:p`),
+      Markup.button.callback(`${index + 1}/${total}`, `${t}noop`),
+      Markup.button.callback('▶️', `${t}nav:n`),
     ];
-    const listRow = [Markup.button.callback('📋 Список', 'view:list')];
+    const listRow = [Markup.button.callback('📋 Список', `${t}view:list`)];
     const abs = resolveEventUrl(e.source_url);
     const openRow = abs ? [Markup.button.url('🔗 Открыть', abs)] : [];
     return Markup.inlineKeyboard([
@@ -545,8 +603,9 @@ export class BotUpdate {
     const text = [header, '', ...lines].join('\n');
 
     // Build number buttons for this page
+    const t = ctx.session.searchToken ? `t:${ctx.session.searchToken}:` : '';
     const numberButtons = slice.map((_, i) =>
-      Markup.button.callback(String(start + i + 1), `go:${start + i}`)
+      Markup.button.callback(String(start + i + 1), `${t}go:${start + i}`)
     );
     const numbersRows: any[] = [];
     // chunk by 5 per row
@@ -554,11 +613,13 @@ export class BotUpdate {
       numbersRows.push(numberButtons.slice(i, i + 5));
     }
     const navRow = [
-      Markup.button.callback('◀️', `list:p:${bounded - 1}`),
-      Markup.button.callback(`${bounded + 1}/${totalPages}`, 'noop'),
-      Markup.button.callback('▶️', `list:n:${bounded + 1}`),
+      Markup.button.callback('◀️', `${t}list:${bounded - 1}`),
+      Markup.button.callback(`${bounded + 1}/${totalPages}`, `${t}noop`),
+      Markup.button.callback('▶️', `${t}list:${bounded + 1}`),
     ];
-    const toCardRow = [Markup.button.callback('🔙 К карточке', 'view:card')];
+    const toCardRow = [
+      Markup.button.callback('🔙 К карточке', `${t}view:card`),
+    ];
 
     await ctx.editMessageText(text, {
       parse_mode: undefined,
