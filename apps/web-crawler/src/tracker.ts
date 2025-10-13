@@ -160,11 +160,14 @@ async function postTrack(payload: {
 
 export async function trackProgressStart(
   text: string,
-  context?: LogContext
+  context?: LogContext & { url?: string }
 ): Promise<number | null> {
+  // Add URL to the text if provided
+  const fullText = context?.url ? `${text}\n🌐 URL: ${context.url}` : text;
+
   const resp = await postTrack({
     kind: 'parsing_progress',
-    text,
+    text: fullText,
     context: {
       ...context,
       timestamp: formatTimestamp(),
@@ -180,12 +183,14 @@ export async function trackProgressEdit(
   text: string,
   context?: LogContext
 ): Promise<void> {
-  if (!messageId) return;
+  // Ignore messageId, always send new message
   await postTrack({
-    kind: 'parsing_result_edit',
+    kind: 'job_completed',
     text,
-    messageId,
-    context,
+    context: {
+      ...context,
+      timestamp: formatTimestamp(),
+    },
   });
 }
 
@@ -218,11 +223,14 @@ export async function trackSchedulerStatus(
 }
 
 export async function trackJobStarted(
-  configName: string
+  configName: string,
+  url?: string
 ): Promise<number | null> {
   const resp = await postTrack({
     kind: 'job_started',
-    text: '🚀 Запущено парсинг завдання',
+    text: url
+      ? `🚀 Запущено парсинг завдання\n🌐 URL: ${url}`
+      : '🚀 Запущено парсинг завдання',
     context: {
       configName,
       timestamp: formatTimestamp(),
@@ -249,24 +257,14 @@ export async function trackJobCompleted(
     ? '✅ Завдання успішно виконано'
     : '❌ Завдання завершилось з помилкою';
 
-  if (messageId) {
-    await postTrack({
-      kind: 'parsing_result_edit',
-      text,
-      messageId,
-      context: {
-        configName,
-        ...stats,
-      },
-    });
-  } else {
-    await postTrack({
-      kind: 'job_completed',
-      text,
-      context: {
-        configName,
-        ...stats,
-      },
-    });
-  }
+  // Always send a new message, ignore messageId
+  await postTrack({
+    kind: 'job_completed',
+    text,
+    context: {
+      configName,
+      timestamp: formatTimestamp(),
+      ...stats,
+    },
+  });
 }

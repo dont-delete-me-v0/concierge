@@ -5,6 +5,7 @@
   "state_prefix": "concert.ua:kyiv:theater",
   "waitFor": [".event-card", ".item-card"],
   "headless": true,
+  "retries": 2,
   "pagination": {
     "type": "infinite-scroll",
     "scrollDelay": 3000

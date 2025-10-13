@@ -27,14 +27,7 @@ export class TelegramController {
     const parse_mode = dto.parseMode;
     const disable_web_page_preview = dto.disablePreview;
 
-    if (dto.kind === 'parsing_result_edit' && dto.messageId) {
-      return this.telegram.editMessage(dto.messageId, dto.text, {
-        parse_mode,
-        disable_web_page_preview,
-      });
-    }
-
-    // For both critical errors and progress we send a new message
+    // Always send a new message - no more editing
     return this.telegram.sendMessage(dto.text, {
       parse_mode,
       disable_web_page_preview,

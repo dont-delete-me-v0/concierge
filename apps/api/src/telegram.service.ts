@@ -46,32 +46,4 @@ export class TelegramService {
       return { ok: false, error: err };
     }
   }
-
-  async editMessage(
-    messageId: number,
-    text: string,
-    opts: SendMessageOptions = {}
-  ): Promise<{ ok: boolean; error?: unknown }> {
-    if (!this.telegram || !this.chatId) {
-      return { ok: false, error: 'Telegram not configured' };
-    }
-    try {
-      await this.telegram.editMessageText(
-        this.chatId,
-        messageId,
-        undefined,
-        text,
-        {
-          parse_mode: opts.parse_mode,
-          link_preview_options: opts.disable_web_page_preview
-            ? { is_disabled: true }
-            : undefined,
-        } as any
-      );
-      return { ok: true };
-    } catch (err) {
-      this.logger.error('Telegram editMessage error', err as Error);
-      return { ok: false, error: err };
-    }
-  }
 }

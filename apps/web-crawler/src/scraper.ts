@@ -246,7 +246,10 @@ export class ConfigurableScraper {
           let details: Record<string, string | undefined> | undefined;
           if (href) {
             // Open new tab to the href
-            if (!this.page) continue; // type guard
+            if (!this.page || this.page.isClosed()) {
+              console.warn('Main page is closed, skipping enrichment');
+              continue;
+            }
             const context = this.page.context();
             const p = await context.newPage();
             try {
@@ -322,7 +325,10 @@ export class ConfigurableScraper {
             }
           } else if (detailsCfg.clickSelector) {
             // Click flow in same page via new tab opening
-            if (!this.page) continue; // type guard
+            if (!this.page || this.page.isClosed()) {
+              console.warn('Main page is closed, skipping enrichment');
+              continue;
+            }
             const [newPage] = await Promise.all([
               this.page
                 .context()
@@ -406,8 +412,12 @@ export class ConfigurableScraper {
           if (details) {
             for (const [k, v] of Object.entries(details)) rows[idx][k] = v;
           }
-        } catch {
-          // ignore per-item errors
+        } catch (err) {
+          const errorMsg = (err as Error)?.message ?? String(err);
+          console.warn(
+            `Failed to enrich item ${idx} (${href ?? 'no link'}): ${errorMsg}`
+          );
+          // Continue with next item
         }
       }
     };

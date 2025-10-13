@@ -59,7 +59,10 @@ function toAbsoluteUrl(
   }
 }
 
-async function runOnce(config: ScraperConfig): Promise<void> {
+async function runOnce(
+  config: ScraperConfig,
+  configName?: string
+): Promise<void> {
   console.log('🚀 Starting crawler run...');
   const scraper = new ConfigurableScraper(config);
   let progressMessageId: number | null = null;
@@ -70,7 +73,10 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     const out = config.outputFile ?? 'results.json';
 
     if (!incremental?.enabled) {
-      progressMessageId = await trackProgressStart('⏱️ Parsing started...');
+      progressMessageId = await trackProgressStart('⏱️ Парсинг розпочато', {
+        configName,
+        url: config.url,
+      });
       console.log('📊 Scraping data (no incremental mode)...');
       const rows = await scraper.scrape();
       console.log(`📈 Scraped ${rows.length} rows`);
@@ -123,14 +129,21 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
       await trackProgressEdit(
         progressMessageId,
-        `✅ Done: ${rows.length} items published`
+        `✅ Завдання завершено: опубліковано ${rows.length} елементів`,
+        {
+          configName,
+          itemsCount: rows.length,
+        }
       );
       return;
     }
 
     const uniqueKey = incremental.uniqueKey ?? [];
     if (uniqueKey.length === 0) {
-      progressMessageId = await trackProgressStart('⏱️ Parsing started...');
+      progressMessageId = await trackProgressStart('⏱️ Парсинг розпочато', {
+        configName,
+        url: config.url,
+      });
       console.log('📊 Scraping data (no unique key)...');
       const rows = await scraper.scrape();
       console.log(`📈 Scraped ${rows.length} rows`);
@@ -181,7 +194,11 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       console.log(`✅ Published ${rows.length} rows to RabbitMQ`);
       await trackProgressEdit(
         progressMessageId,
-        `✅ Done: ${rows.length} items published`
+        `✅ Завдання завершено: опубліковано ${rows.length} елементів`,
+        {
+          configName,
+          itemsCount: rows.length,
+        }
       );
       return;
     }
@@ -208,7 +225,10 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       : new Set<string>(existingState?.hashes ?? []);
 
     // Always fully scrape; deduplicate on write
-    progressMessageId = await trackProgressStart('⏱️ Parsing started...');
+    progressMessageId = await trackProgressStart('⏱️ Парсинг розпочато', {
+      configName,
+      url: config.url,
+    });
     console.log('📊 Scraping data...');
     const allRows = await scraper.scrape();
     console.log(`📈 Scraped ${allRows.length} total rows`);
@@ -359,7 +379,15 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     );
     await trackProgressEdit(
       progressMessageId,
-      `✅ Done: ${outputRows.length} ${updateExisting ? `(new: ${newRows.length}, updated: ${updatedRows.length}) ` : ''}published`
+      `✅ Завдання завершено${updateExisting ? `: нових ${newRows.length}, оновлених ${updatedRows.length}` : `: опубліковано ${outputRows.length} елементів`}`,
+      {
+        configName,
+        itemsCount: outputRows.length,
+        newItems: newRows.length,
+        ...(updateExisting && updatedRows.length > 0
+          ? { updatedItems: updatedRows.length }
+          : {}),
+      }
     );
 
     // Build next state
@@ -407,11 +435,19 @@ async function runOnce(config: ScraperConfig): Promise<void> {
       );
     }
   } catch (err) {
+    const errorMessage = (err as Error)?.message ?? String(err);
+    console.error('❌ Crawler error:', errorMessage);
     try {
       await trackCriticalError(
-        `❌ Crawler failed: ${(err as Error)?.message ?? String(err)}`
+        `❌ Парсинг завершився з помилкою: ${errorMessage}`,
+        {
+          configName,
+          errorDetails: errorMessage,
+        }
       );
-    } catch {}
+    } catch (trackErr) {
+      console.error('Failed to send error notification:', trackErr);
+    }
     throw err;
   } finally {
     await scraper.close();
@@ -470,18 +506,29 @@ async function main(): Promise<void> {
       }
       const cfg = validated.config;
       const retries = cfg.retries ?? 0;
+      const configName = path.basename(configPath);
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
           console.log(`Run attempt ${attempt + 1}/${retries + 1}`);
-          await runOnce(cfg);
+          await runOnce(cfg, configName);
           break;
         } catch (err) {
-          console.error('Run failed:', err);
+          const errorMessage = (err as Error)?.message ?? String(err);
+          console.error(`Run attempt ${attempt + 1} failed:`, errorMessage);
+
           if (attempt === retries) {
+            // Last attempt failed
+            console.error(
+              `All ${retries + 1} attempts failed for ${configName}`
+            );
             process.exitCode = 1;
             break;
           }
-          await sleep(1000 * (attempt + 1));
+
+          // Wait before retry
+          const waitTime = 1000 * (attempt + 1);
+          console.log(`Waiting ${waitTime}ms before retry...`);
+          await sleep(waitTime);
         }
       }
     }
@@ -495,6 +542,19 @@ async function main(): Promise<void> {
     process.exit(process.exitCode || 0);
   }
 }
+
+// Global error handlers
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exitCode = 1;
+});
+
+process.on('uncaughtException', error => {
+  console.error('Uncaught Exception:', error);
+  process.exitCode = 1;
+  // Give time for logs to flush
+  setTimeout(() => process.exit(1), 1000);
+});
 
 // Execute only when run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
