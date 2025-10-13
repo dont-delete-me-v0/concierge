@@ -1,0 +1,147 @@
+{
+  "url": "https://concert.ua/uk/catalog/kyiv/excursions",
+  "source_base_url": "https://concert.ua",
+  "category_name": "excursions",
+  "state_prefix": "concert.ua:kyiv:excursions",
+  "waitFor": [
+    ".event-card",
+    ".item-card"
+  ],
+  "headless": true,
+  "retries": 2,
+  "proxyFile": "crawl-configs/proxies.txt",
+  "proxyRotation": "random",
+  "retryOnStatusCodes": [
+    429,
+    503,
+    403
+  ],
+  "pagination": {
+    "type": "infinite-scroll",
+    "scrollDelay": 3000
+  },
+  "selectors": [
+    {
+      "name": "title",
+      "selector": ".item-card-title",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "price",
+      "selector": ".item-card .fs-16",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "link",
+      "selector": ".item-card",
+      "type": "attribute",
+      "attribute": "href",
+      "multiple": true
+    },
+    {
+      "name": "eventId",
+      "selector": ".item-card",
+      "type": "attribute",
+      "attribute": "data-id",
+      "multiple": true
+    },
+    {
+      "name": "dateTime",
+      "selector": ".item-card .fw-900.fs-14",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "venue",
+      "selector": ".item-card .color-secondary.fs-14",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    }
+  ],
+  "userAgents": [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 15.6; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (X11; Linux i686; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:141.0) Gecko/20100101 Firefox/141.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0)",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.0; Trident/4.0)",
+    "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0)",
+    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.0; Trident/5.0)",
+    "Mozilla/4.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; Trident/6.0)",
+    "Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Trident/6.0)",
+    "Mozilla/5.0 (Windows NT 6.1; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 6.2; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 10.0; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Edg/139.0.3405.86",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Edg/139.0.3405.86",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/120.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/120.0.0.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/120.0.0.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 OPR/120.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Vivaldi/7.5.3735.58",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Vivaldi/7.5.3735.58",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Vivaldi/7.5.3735.58",
+    "Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36 Vivaldi/7.5.3735.58",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 YaBrowser/25.6.3.357 Yowser/2.5 Safari/537.36"
+  ],
+  "userAgentRotation": "random",
+  "incremental": {
+    "enabled": true,
+    "uniqueKey": [
+      "link",
+      "dateTime"
+    ]
+  },
+  "details": {
+    "clickSelector": ".event-card",
+    "selectors": [
+      {
+        "name": "description",
+        "selector": ".event-description",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "description",
+        "selector": ".event-simple-text",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "dateTime",
+        "selector": ".event-date",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "venue",
+        "selector": ".venue-info",
+        "type": "text",
+        "transform": "trim"
+      }
+    ],
+    "waitFor": [
+      ".event-description",
+      ".event-simple-text",
+      ".event-date",
+      ".venue-info"
+    ],
+    "maxConcurrency": 5,
+    "timeoutMs": 8000
+  }
+}

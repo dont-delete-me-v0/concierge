@@ -48,7 +48,10 @@ export interface ScraperConfig {
   timeoutMs?: number;
   headless?: boolean;
   proxyServer?: string;
+  proxyFile?: string; // Path to file with proxies (ip:port:user:pass format)
+  proxyRotation?: 'random' | 'sequential';
   retries?: number;
+  retryOnStatusCodes?: number[]; // Status codes that trigger retry (default: [429, 503])
   userAgents?: string[];
   userAgentRotation?: 'random' | 'sequential';
   details?: DetailsConfig;

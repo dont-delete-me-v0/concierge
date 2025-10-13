@@ -61,14 +61,18 @@ function toAbsoluteUrl(
 
 async function runOnce(
   config: ScraperConfig,
-  configName?: string
+  configName?: string,
+  scraper?: ConfigurableScraper,
+  shouldInit: boolean = true
 ): Promise<void> {
   console.log('🚀 Starting crawler run...');
-  const scraper = new ConfigurableScraper(config);
+  const scraperInstance = scraper ?? new ConfigurableScraper(config);
   let progressMessageId: number | null = null;
   try {
-    console.log('🌐 Initializing browser...');
-    await scraper.init();
+    if (shouldInit) {
+      console.log('🌐 Initializing browser...');
+      await scraperInstance.init();
+    }
     const incremental = config.incremental;
     const out = config.outputFile ?? 'results.json';
 
@@ -78,7 +82,7 @@ async function runOnce(
         url: config.url,
       });
       console.log('📊 Scraping data (no incremental mode)...');
-      const rows = await scraper.scrape();
+      const rows = await scraperInstance.scrape();
       console.log(`📈 Scraped ${rows.length} rows`);
 
       const saveOutput =
@@ -145,7 +149,7 @@ async function runOnce(
         url: config.url,
       });
       console.log('📊 Scraping data (no unique key)...');
-      const rows = await scraper.scrape();
+      const rows = await scraperInstance.scrape();
       console.log(`📈 Scraped ${rows.length} rows`);
 
       const saveOutput =
@@ -230,7 +234,7 @@ async function runOnce(
       url: config.url,
     });
     console.log('📊 Scraping data...');
-    const allRows = await scraper.scrape();
+    const allRows = await scraperInstance.scrape();
     console.log(`📈 Scraped ${allRows.length} total rows`);
 
     // Process rows: find new ones, optionally detect changes for existing
@@ -450,7 +454,10 @@ async function runOnce(
     }
     throw err;
   } finally {
-    await scraper.close();
+    // Don't close scraper here if it was passed in - let the caller handle it
+    if (!scraper) {
+      await scraperInstance.close();
+    }
   }
 }
 
@@ -507,10 +514,23 @@ async function main(): Promise<void> {
       const cfg = validated.config;
       const retries = cfg.retries ?? 0;
       const configName = path.basename(configPath);
+      const scraper = new ConfigurableScraper(cfg);
+
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
           console.log(`Run attempt ${attempt + 1}/${retries + 1}`);
-          await runOnce(cfg, configName);
+
+          // On retry attempts, rotate proxy and user-agent if configured
+          if (attempt > 0 && (cfg.proxyFile || cfg.userAgents)) {
+            console.log('🔄 Rotating proxy and user-agent before retry...');
+            try {
+              await scraper.rotateProxyAndUserAgent();
+            } catch (rotateErr) {
+              console.warn('Failed to rotate proxy/user-agent:', rotateErr);
+            }
+          }
+
+          await runOnce(cfg, configName, scraper, attempt === 0);
           break;
         } catch (err) {
           const errorMessage = (err as Error)?.message ?? String(err);
@@ -525,12 +545,29 @@ async function main(): Promise<void> {
             break;
           }
 
+          // Check if error is proxy/network related
+          const isProxyError =
+            errorMessage.includes('429') ||
+            errorMessage.includes('403') ||
+            errorMessage.includes('503') ||
+            errorMessage.includes('ERR_TUNNEL_CONNECTION_FAILED') ||
+            errorMessage.includes('ERR_PROXY_CONNECTION_FAILED');
+
+          if (isProxyError) {
+            console.log(
+              '🔄 Proxy/network error detected, will rotate on next attempt'
+            );
+          }
+
           // Wait before retry
           const waitTime = 1000 * (attempt + 1);
           console.log(`Waiting ${waitTime}ms before retry...`);
           await sleep(waitTime);
         }
       }
+
+      // Always close scraper
+      await scraper.close();
     }
   } catch (err) {
     console.error('Fatal error:', err);

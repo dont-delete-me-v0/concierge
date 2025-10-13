@@ -43,32 +43,47 @@ TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
 echo "[$TIMESTAMP] Starting concert.ua crawlers..."
 
-# Run concerts crawler
-echo "[$TIMESTAMP] Running concerts crawler..."
-if node dist/index.js config-concert-ua.json >> "$LOG_DIR/concerts.log" 2>&1; then
+# Find all config directories in concert.ua/kyiv
+# Using ls for compatibility (works on systems with fd or find)
+CONFIG_DIRS=$(ls -1d crawl-configs/concert.ua/kyiv/*/ 2>/dev/null | sed 's:/$::' | sort)
+
+TOTAL_CONFIGS=$(echo "$CONFIG_DIRS" | wc -l | tr -d ' ')
+CURRENT=0
+FAILED=0
+
+for CONFIG_DIR in $CONFIG_DIRS; do
+    CURRENT=$((CURRENT + 1))
+    CATEGORY=$(basename "$CONFIG_DIR")
+    CONFIG_FILE="$CONFIG_DIR/config.json"
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "[$TIMESTAMP] WARNING: Config file not found: $CONFIG_FILE"
+        continue
+    fi
+    
     TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$TIMESTAMP] Concerts crawler completed successfully"
+    echo "[$TIMESTAMP] Running crawler $CURRENT/$TOTAL_CONFIGS: $CATEGORY..."
+    
+    if node dist/index.js "$CONFIG_FILE" >> "$LOG_DIR/$CATEGORY.log" 2>&1; then
+        TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "[$TIMESTAMP] ✅ $CATEGORY completed successfully"
+    else
+        TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+        echo "[$TIMESTAMP] ❌ ERROR: $CATEGORY failed with exit code $?"
+        FAILED=$((FAILED + 1))
+    fi
+    
+    # Small delay between crawlers to avoid rate limiting
+    if [ $CURRENT -lt $TOTAL_CONFIGS ]; then
+        sleep 3
+    fi
+done
+
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+if [ $FAILED -eq 0 ]; then
+    echo "[$TIMESTAMP] 🎉 All $TOTAL_CONFIGS crawlers completed successfully!"
 else
-    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$TIMESTAMP] ERROR: Concerts crawler failed with exit code $?"
+    echo "[$TIMESTAMP] ⚠️  Completed with $FAILED failures out of $TOTAL_CONFIGS crawlers"
     exit 1
 fi
-
-# Small delay between crawlers to avoid rate limiting
-sleep 5
-
-# Run theater crawler
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] Running theater crawler..."
-if node dist/index.js config-concert-ua-theather.json >> "$LOG_DIR/theater.log" 2>&1; then
-    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$TIMESTAMP] Theater crawler completed successfully"
-else
-    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$TIMESTAMP] ERROR: Theater crawler failed with exit code $?"
-    exit 1
-fi
-
-TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] All crawlers completed successfully!"
 

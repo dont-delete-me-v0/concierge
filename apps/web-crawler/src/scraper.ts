@@ -1,13 +1,16 @@
+import path from 'node:path';
 import {
   devices,
   type Browser,
   type LaunchOptions,
   type Page,
+  type Response,
 } from 'playwright';
 import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { computeRowHash } from './incremental.js';
 import { PaginationHandler } from './pagination.js';
+import { ProxyManager, type ProxyConfig } from './proxyManager.js';
 import type { ExtractedRow, ScraperConfig, SelectorConfig } from './types.js';
 chromium.use(StealthPlugin());
 
@@ -17,6 +20,9 @@ export class ConfigurableScraper {
   private browser: Browser | null = null;
   private page: Page | null = null;
   private readonly config: ScraperConfig;
+  private proxyManager: ProxyManager | null = null;
+  private currentProxy: ProxyConfig | null = null;
+  private currentUserAgent: string | undefined = undefined;
 
   constructor(config: ScraperConfig) {
     this.config = config;
@@ -24,39 +30,166 @@ export class ConfigurableScraper {
 
   async init(): Promise<void> {
     console.log('Initializing browser...');
-    const launchOptions: LaunchOptions = {
-      headless: this.config.headless ?? false, // Default to visible for debugging
-      proxy: this.config.proxyServer
-        ? { server: this.config.proxyServer }
-        : undefined,
-      timeout: this.config.timeoutMs ?? 30000,
-    };
-    console.log('Launch options:', launchOptions);
-    this.browser = await chromium.launch(launchOptions);
-    console.log('Browser launched successfully');
-    const configuredUserAgents = this.config.userAgents ?? [];
-    let selectedUserAgent: string | undefined;
-    if (configuredUserAgents.length > 0) {
-      if ((this.config.userAgentRotation ?? 'random') === 'sequential') {
-        selectedUserAgent =
-          configuredUserAgents[
-            userAgentSequentialIndex % configuredUserAgents.length
-          ];
-        userAgentSequentialIndex =
-          (userAgentSequentialIndex + 1) % configuredUserAgents.length;
-      } else {
-        const idx = Math.floor(Math.random() * configuredUserAgents.length);
-        selectedUserAgent = configuredUserAgents[idx];
+
+    // Load proxies if proxyFile is specified
+    if (this.config.proxyFile) {
+      this.proxyManager = new ProxyManager();
+      const proxyPath = path.isAbsolute(this.config.proxyFile)
+        ? this.config.proxyFile
+        : path.join(process.cwd(), this.config.proxyFile);
+      await this.proxyManager.loadProxies(proxyPath);
+
+      if (this.proxyManager.hasProxies()) {
+        // Get first proxy
+        this.currentProxy =
+          this.config.proxyRotation === 'random'
+            ? this.proxyManager.getRandom()
+            : this.proxyManager.getNext();
       }
     }
 
+    await this.initBrowser();
+  }
+
+  private async initBrowser(): Promise<void> {
+    // Determine proxy
+    let proxyConfig:
+      | { server: string; username?: string; password?: string }
+      | undefined;
+
+    if (this.currentProxy) {
+      // Important: Playwright requires proxy server WITHOUT auth in URL
+      // Auth credentials are passed separately
+      proxyConfig = {
+        server: `http://${this.currentProxy.host}:${this.currentProxy.port}`,
+        username: this.currentProxy.username,
+        password: this.currentProxy.password,
+      };
+      console.log(
+        `Using proxy: ${this.currentProxy.host}:${this.currentProxy.port}${this.currentProxy.username ? ' (with auth)' : ''}`
+      );
+    } else if (this.config.proxyServer) {
+      proxyConfig = { server: this.config.proxyServer };
+      console.log(`Using proxy server: ${this.config.proxyServer}`);
+    }
+
+    const launchOptions: LaunchOptions = {
+      headless: this.config.headless ?? false,
+      proxy: proxyConfig,
+      timeout: this.config.timeoutMs ?? 30000,
+    };
+
+    console.log('Launch options:', {
+      headless: launchOptions.headless,
+      timeout: launchOptions.timeout,
+      proxy: proxyConfig
+        ? {
+            server: proxyConfig.server,
+            hasAuth: !!(proxyConfig.username && proxyConfig.password),
+          }
+        : undefined,
+    });
+    this.browser = await chromium.launch(launchOptions);
+    console.log('Browser launched successfully');
+
+    // Select user agent
+    this.currentUserAgent = this.selectUserAgent();
+
     const context = await this.browser.newContext({
       ...devices['Desktop Chrome'],
-      userAgent: selectedUserAgent ?? devices['Desktop Chrome'].userAgent,
+      userAgent: this.currentUserAgent ?? devices['Desktop Chrome'].userAgent,
+      // Ignore HTTPS errors that might occur with some proxies
+      ignoreHTTPSErrors: true,
     });
     console.log('Browser context created');
+
     this.page = await context.newPage();
+
+    // Note: Proxy authentication is configured at browser launch level
+    // via launchOptions.proxy.username/password
+    if (this.currentProxy?.username && this.currentProxy?.password) {
+      console.log('Using proxy with authentication');
+    }
+
+    // Add response listener for error detection
+    this.page.on('response', (response: Response) => {
+      this.handleResponse(response);
+    });
+
     console.log('New page created');
+  }
+
+  private selectUserAgent(): string | undefined {
+    const configuredUserAgents = this.config.userAgents ?? [];
+    if (configuredUserAgents.length === 0) {
+      return undefined;
+    }
+
+    if ((this.config.userAgentRotation ?? 'random') === 'sequential') {
+      const ua =
+        configuredUserAgents[
+          userAgentSequentialIndex % configuredUserAgents.length
+        ];
+      userAgentSequentialIndex =
+        (userAgentSequentialIndex + 1) % configuredUserAgents.length;
+      return ua;
+    } else {
+      const idx = Math.floor(Math.random() * configuredUserAgents.length);
+      return configuredUserAgents[idx];
+    }
+  }
+
+  private handleResponse(response: Response): void {
+    const status = response.status();
+    const url = response.url();
+
+    // Check for problematic status codes
+    const retryStatusCodes = this.config.retryOnStatusCodes ?? [429, 503, 403];
+
+    if (retryStatusCodes.includes(status)) {
+      console.warn(`⚠️  Received status ${status} from ${url}`);
+
+      if (status === 429) {
+        console.warn(
+          'Rate limit detected (429). Will rotate proxy/user-agent on next retry.'
+        );
+      } else if (status === 403) {
+        console.warn(
+          'Forbidden (403). Possible bot detection. Will rotate proxy/user-agent on next retry.'
+        );
+      }
+    }
+  }
+
+  async rotateProxyAndUserAgent(): Promise<void> {
+    console.log('🔄 Rotating proxy and user-agent...');
+
+    // Mark current proxy as potentially failed
+    if (this.currentProxy && this.proxyManager) {
+      this.proxyManager.markFailed(this.currentProxy);
+    }
+
+    // Get new proxy
+    if (this.proxyManager && this.proxyManager.hasProxies()) {
+      this.currentProxy =
+        this.config.proxyRotation === 'random'
+          ? this.proxyManager.getRandom()
+          : this.proxyManager.getNext();
+
+      if (this.currentProxy) {
+        console.log(
+          `Switched to proxy: ${this.proxyManager.getProxyKey(this.currentProxy)}`
+        );
+      }
+    }
+
+    // Close current browser
+    await this.close();
+
+    // Reinitialize with new proxy
+    await this.initBrowser();
+
+    console.log('✅ Proxy and user-agent rotated successfully');
   }
 
   async close(): Promise<void> {
@@ -72,19 +205,73 @@ export class ConfigurableScraper {
   private async navigate(): Promise<void> {
     if (!this.page) throw new Error('Page not initialized');
     console.log(`Navigating to ${this.config.url}`);
-    await this.page.goto(this.config.url, {
-      timeout: this.config.timeoutMs ?? 30000,
-      waitUntil: 'domcontentloaded',
-    });
-    const selectors = Array.isArray(this.config.waitFor)
-      ? this.config.waitFor
-      : [this.config.waitFor];
-    const timeout = this.config.timeoutMs ?? 30000;
-    // Wait for the first selector that appears
-    const page = this.page;
-    await Promise.race(
-      selectors.map(sel => page.waitForSelector(sel, { timeout }))
-    );
+
+    try {
+      const response = await this.page.goto(this.config.url, {
+        timeout: this.config.timeoutMs ?? 30000,
+        waitUntil: 'domcontentloaded',
+      });
+
+      // Check response status
+      if (response) {
+        const status = response.status();
+        const headers = response.headers();
+        console.log(`Response: ${status} ${response.statusText()}`);
+
+        // Log useful headers for debugging
+        if (headers['cf-ray']) {
+          console.log(`Cloudflare Ray ID: ${headers['cf-ray']}`);
+        }
+        if (headers['x-proxy-id']) {
+          console.log(`Proxy ID: ${headers['x-proxy-id']}`);
+        }
+
+        const retryStatusCodes = this.config.retryOnStatusCodes ?? [
+          429, 503, 403,
+        ];
+
+        if (retryStatusCodes.includes(status)) {
+          throw new Error(
+            `Navigation failed with status ${status}: ${response.statusText()}`
+          );
+        }
+      } else {
+        console.warn(
+          'No response received (might be a timeout or network error)'
+        );
+      }
+
+      const selectors = Array.isArray(this.config.waitFor)
+        ? this.config.waitFor
+        : [this.config.waitFor];
+      const timeout = this.config.timeoutMs ?? 30000;
+      // Wait for the first selector that appears
+      const page = this.page;
+      await Promise.race(
+        selectors.map(sel => page.waitForSelector(sel, { timeout }))
+      );
+      console.log('✅ Page loaded and selectors found');
+    } catch (err) {
+      const errorMsg = (err as Error)?.message ?? String(err);
+      console.error('❌ Navigation error:', errorMsg);
+
+      // Add more context for common errors
+      if (errorMsg.includes('ERR_TUNNEL_CONNECTION_FAILED')) {
+        console.error(
+          '💡 Proxy connection failed - check proxy credentials and connectivity'
+        );
+      } else if (errorMsg.includes('ERR_PROXY_CONNECTION_FAILED')) {
+        console.error(
+          '💡 Cannot connect to proxy server - check if proxy is online'
+        );
+      } else if (errorMsg.includes('Timeout')) {
+        console.error(
+          '💡 Navigation timeout - site might be slow or blocking the request'
+        );
+      }
+
+      throw err;
+    }
   }
 
   private async waitSelectorStable(

@@ -1,11 +1,21 @@
 {
-  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-17",
+  "url": "https://concert.ua/uk/catalog/kyiv/electronic",
   "source_base_url": "https://concert.ua",
-  "category_name": "concerts",
-  "state_prefix": "concert.ua:kyiv:concerts",
-  "waitFor": [".event-card", ".item-card"],
+  "category_name": "electronic",
+  "state_prefix": "concert.ua:kyiv:electronic",
+  "waitFor": [
+    ".event-card",
+    ".item-card"
+  ],
   "headless": true,
   "retries": 2,
+  "proxyFile": "crawl-configs/proxies.txt",
+  "proxyRotation": "random",
+  "retryOnStatusCodes": [
+    429,
+    503,
+    403
+  ],
   "pagination": {
     "type": "infinite-scroll",
     "scrollDelay": 3000
@@ -92,17 +102,45 @@
   "userAgentRotation": "random",
   "incremental": {
     "enabled": true,
-    "uniqueKey": ["link", "dateTime"]
+    "uniqueKey": [
+      "link",
+      "dateTime"
+    ]
   },
   "details": {
     "clickSelector": ".event-card",
     "selectors": [
-      { "name": "description", "selector": ".event-description", "type": "text", "transform": "trim" },
-      { "name": "description", "selector": ".event-simple-text", "type": "text", "transform": "trim" },
-      { "name": "dateTime", "selector": ".event-date", "type": "text", "transform": "trim" },
-      { "name": "venue", "selector": ".venue-info", "type": "text", "transform": "trim" }
+      {
+        "name": "description",
+        "selector": ".event-description",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "description",
+        "selector": ".event-simple-text",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "dateTime",
+        "selector": ".event-date",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "venue",
+        "selector": ".venue-info",
+        "type": "text",
+        "transform": "trim"
+      }
     ],
-    "waitFor": [".event-description", ".event-simple-text", ".event-date", ".venue-info"],
+    "waitFor": [
+      ".event-description",
+      ".event-simple-text",
+      ".event-date",
+      ".venue-info"
+    ],
     "maxConcurrency": 5,
     "timeoutMs": 8000
   }
