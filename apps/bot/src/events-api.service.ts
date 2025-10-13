@@ -16,7 +16,7 @@ export interface EventItem {
 
 export interface SearchParams {
   q?: string;
-  categoryId?: string;
+  categoryId?: string | string[]; // Поддержка одной или нескольких категорий
   venueName?: string;
   date?: 'today' | 'tomorrow' | 'week' | string; // ISO date
   dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss

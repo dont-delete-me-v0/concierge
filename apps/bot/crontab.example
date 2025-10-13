@@ -1,0 +1,35 @@
+# Ежедневная рассылка подборок в 10:00 утра (по киевскому времени)
+# 
+# Формат crontab:
+# минута час день месяц день_недели команда
+#
+# Установка cron задачи:
+# 1. Откройте редактор crontab: crontab -e
+# 2. Добавьте строку ниже (замените пути на ваши)
+# 3. Сохраните и закройте редактор
+
+# Ежедневная рассылка в 10:00 (UTC+2 - Kiev time)
+# Если сервер в UTC, используйте 8:00 UTC = 10:00 Kiev
+0 8 * * * cd /Users/alumetri/code/concierge/apps/bot && /usr/local/bin/npm run digest >> /tmp/concierge-digest.log 2>&1
+
+# Альтернативный вариант с явным указанием переменных окружения:
+# 0 8 * * * cd /path/to/concierge/apps/bot && /usr/bin/env NODE_ENV=production /usr/local/bin/npm run digest >> /var/log/concierge-digest.log 2>&1
+
+# Пример для разных временных зон:
+# 10:00 Moscow (UTC+3): 0 7 * * *
+# 10:00 Kiev (UTC+2):   0 8 * * *
+# 10:00 UTC:            0 10 * * *
+
+# Для тестирования можно запустить каждую минуту:
+# * * * * * cd /Users/alumetri/code/concierge/apps/bot && /usr/local/bin/npm run digest >> /tmp/concierge-digest.log 2>&1
+
+# Проверка логов:
+# tail -f /tmp/concierge-digest.log
+
+# Примечания:
+# - Убедитесь, что .env файл находится в директории apps/bot/
+# - Убедитесь, что переменная TELEGRAM_BOT_TOKEN установлена
+# - Убедитесь, что PostgreSQL и Redis доступны
+# - Проверьте, что путь к npm правильный: which npm
+# - Для production используйте абсолютные пути
+

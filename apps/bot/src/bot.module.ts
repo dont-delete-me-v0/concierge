@@ -4,6 +4,7 @@ import { TelegrafModule } from 'nestjs-telegraf';
 import { session } from 'telegraf';
 import { BotUpdate } from './bot.update.js';
 import { DatabaseService } from './database.service.js';
+import { DigestService } from './digest.service.js';
 import { EventsApiService } from './events-api.service.js';
 import { RedisSessionStore } from './redis-session.store.js';
 import { UserService } from './user.service.js';
@@ -55,6 +56,12 @@ const sessionStore = new RedisSessionStore(redis, {
       ],
     }),
   ],
-  providers: [BotUpdate, EventsApiService, DatabaseService, UserService],
+  providers: [
+    BotUpdate,
+    EventsApiService,
+    DatabaseService,
+    UserService,
+    DigestService,
+  ],
 })
 export class BotModule {}

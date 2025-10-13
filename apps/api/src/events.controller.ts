@@ -35,7 +35,7 @@ export class EventsController {
   @Get('search')
   search(
     @Query('q') q?: string,
-    @Query('categoryId') categoryId?: string,
+    @Query('categoryId') categoryId?: string | string[],
     @Query('venueName') venueName?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
@@ -48,9 +48,17 @@ export class EventsController {
     const offset = Math.max(0, Number(offsetStr ?? 0));
     const priceFrom = priceFromStr ? Number(priceFromStr) : undefined;
     const priceTo = priceToStr ? Number(priceToStr) : undefined;
+
+    // Нормализуем categoryId - может быть строка или массив
+    const categoryIds = categoryId
+      ? Array.isArray(categoryId)
+        ? categoryId
+        : [categoryId]
+      : undefined;
+
     console.log('[EventsController] /search received:', {
       q,
-      categoryId,
+      categoryId: categoryIds,
       venueName,
       dateFrom,
       dateTo,
@@ -61,7 +69,7 @@ export class EventsController {
     });
     const result = this.events.searchPaginated({
       q,
-      categoryId,
+      categoryIds,
       venueName,
       dateFrom,
       dateTo,

@@ -34,6 +34,56 @@ export class BotUpdate {
     return Math.random().toString(36).slice(2, 10);
   }
 
+  /**
+   * Получить все события с пагинацией
+   */
+  private async getAllEventsWithPagination(searchParams: any): Promise<{
+    events: import('./events-api.service.js').EventItem[];
+    total: number;
+  }> {
+    const allEvents: import('./events-api.service.js').EventItem[] = [];
+    let offset = 0;
+    const limit = 50;
+    let totalCount = 0;
+
+    console.log('[BotUpdate] Starting pagination with params:', searchParams);
+
+    while (true) {
+      const { items, total } = await this.eventsApi.search({
+        ...searchParams,
+        limit,
+        offset,
+      });
+
+      console.log(
+        `[BotUpdate] Page fetched: offset=${offset}, items=${items.length}, total=${total}`
+      );
+
+      allEvents.push(...items);
+      totalCount = total;
+      offset += limit;
+
+      // Проверяем, есть ли еще события
+      const hasMore = allEvents.length < total && items.length === limit;
+      console.log(
+        `[BotUpdate] hasMore=${hasMore} (collected=${allEvents.length}, total=${total}, lastPageSize=${items.length})`
+      );
+
+      if (!hasMore) break;
+
+      // Защита от бесконечного цикла
+      if (offset > 1000) {
+        console.warn('[BotUpdate] Reached maximum offset limit (1000)');
+        break;
+      }
+    }
+
+    console.log(
+      `[BotUpdate] Pagination complete: collected ${allEvents.length} events`
+    );
+    return { events: allEvents, total: totalCount };
+  }
+
   @Start()
   async onStart(@Ctx() ctx: BotContext) {
     // Автоматическая регистрация пользователя
@@ -281,6 +331,90 @@ export class BotUpdate {
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
+      await this.buildCardKeyboard(
+        first,
+        0,
+        total,
+        ctx.session.searchToken,
+        ctx
+      )
+    );
+  }
+
+  @Hears('🎯 Подборка для меня')
+  async onRecommendations(@Ctx() ctx: BotContext) {
+    const telegramId = String(ctx.from?.id || '');
+
+    // Получаем предпочтения пользователя
+    const preferences = await this.userService.getUserPreferences(telegramId);
+
+    if (
+      !preferences ||
+      (!preferences.category_ids?.length &&
+        !preferences.price_min &&
+        !preferences.price_max)
+    ) {
+      await ctx.reply(
+        '🎯 Настройте ваши предпочтения в профиле для персональной подборки!\n\n' +
+          'Перейдите в 👤 Профиль → ⚙️ Предпочтения и укажите:\n' +
+          '• Интересующие категории\n' +
+          '• Желаемый диапазон цен',
+        mainKeyboard()
+      );
+      return;
+    }
+
+    // Формируем параметры поиска на основе предпочтений
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
+
+    const searchParams: any = {
+      dateFrom: today,
+      dateTo: nextWeek,
+    };
+
+    if (preferences.category_ids?.length) {
+      // Передаем все категории из предпочтений
+      searchParams.categoryId = preferences.category_ids;
+    }
+
+    if (preferences.price_min) {
+      searchParams.priceFrom = preferences.price_min;
+    }
+
+    if (preferences.price_max) {
+      searchParams.priceTo = preferences.price_max;
+    }
+
+    // Получаем все события с пагинацией
+    const { events, total } =
+      await this.getAllEventsWithPagination(searchParams);
+
+    if (!events.length) {
+      await ctx.reply(
+        '🎯 К сожалению, не нашлось мероприятий по вашим предпочтениям.\n\n' +
+          'Попробуйте расширить критерии поиска в профиле.',
+        mainKeyboard()
+      );
+      return;
+    }
+
+    // Показываем подборку
+    ctx.session.events = events;
+    ctx.session.totalEvents = total;
+    ctx.session.searchParams = searchParams;
+    ctx.session.currentIndex = 0;
+    ctx.session.view = 'card';
+    ctx.session.searchToken = this.generateSearchToken();
+
+    const first = events[0];
+    const message = `🎯 <b>Подборка для вас</b>\n\nНайдено ${total} мероприятий по вашим предпочтениям:\n\n${formatEventCard(first)}`;
+
+    await ctx.replyWithHTML(
+      message,
       await this.buildCardKeyboard(
         first,
         0,

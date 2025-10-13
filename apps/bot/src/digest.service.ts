@@ -1,0 +1,249 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { InjectBot } from 'nestjs-telegraf';
+import * as cron from 'node-cron';
+import { Telegraf } from 'telegraf';
+import { EventsApiService } from './events-api.service.js';
+import { UserService } from './user.service.js';
+
+interface DigestStats {
+  sent: number;
+  failed: number;
+  noPreferences: number;
+  noEvents: number;
+}
+
+@Injectable()
+export class DigestService implements OnModuleInit {
+  private readonly logger = new Logger(DigestService.name);
+  private cronJob: cron.ScheduledTask | null = null;
+
+  constructor(
+    @InjectBot() private readonly bot: Telegraf,
+    private readonly userService: UserService,
+    private readonly eventsApi: EventsApiService
+  ) {}
+
+  onModuleInit() {
+    // Запускаем cron задачу при старте приложения
+    // Формат: секунды минуты часы день месяц день_недели
+    // 0 8 * * * = каждый день в 8:00 UTC (10:00 Kiev time)
+    const cronExpression = process.env.DIGEST_CRON || '0 8 * * *';
+
+    this.logger.log(`Starting digest scheduler with cron: ${cronExpression}`);
+
+    this.cronJob = cron.schedule(
+      cronExpression,
+      async () => {
+        this.logger.log('Running scheduled daily digest...');
+        await this.sendDailyDigest();
+      },
+      {
+        timezone: 'Europe/Kiev', // Kiev time zone
+      }
+    );
+
+    this.logger.log('Digest scheduler started successfully');
+  }
+
+  /**
+   * Получить все события с пагинацией
+   */
+  private async getAllEvents(searchParams: any): Promise<any[]> {
+    const allEvents: any[] = [];
+    let offset = 0;
+    const limit = 50;
+    let hasMore = true;
+
+    this.logger.log(
+      `[Digest] Starting pagination with params: ${JSON.stringify(searchParams)}`
+    );
+
+    while (hasMore) {
+      const { items, total } = await this.eventsApi.search({
+        ...searchParams,
+        limit,
+        offset,
+      });
+
+      this.logger.log(
+        `[Digest] Page fetched: offset=${offset}, items=${items.length}, total=${total}`
+      );
+
+      allEvents.push(...items);
+      offset += limit;
+
+      // Проверяем, есть ли еще события
+      hasMore = allEvents.length < total && items.length === limit;
+
+      this.logger.log(
+        `[Digest] hasMore=${hasMore} (collected=${allEvents.length}, total=${total}, lastPageSize=${items.length})`
+      );
+
+      // Защита от бесконечного цикла
+      if (offset > 1000) {
+        this.logger.warn('[Digest] Reached maximum offset limit (1000)');
+        break;
+      }
+    }
+
+    this.logger.log(
+      `[Digest] Pagination complete: collected ${allEvents.length} events`
+    );
+    return allEvents;
+  }
+
+  /**
+   * Отправить ежедневную рассылку
+   */
+  async sendDailyDigest(): Promise<DigestStats> {
+    const stats: DigestStats = {
+      sent: 0,
+      failed: 0,
+      noPreferences: 0,
+      noEvents: 0,
+    };
+
+    this.logger.log('Starting daily digest...');
+
+    try {
+      // Получаем всех пользователей с предпочтениями
+      const usersWithPrefs =
+        await this.userService.getAllUsersWithPreferences();
+      this.logger.log(`Found ${usersWithPrefs.length} users with preferences`);
+
+      if (usersWithPrefs.length === 0) {
+        this.logger.log('No users with preferences found');
+        return stats;
+      }
+
+      // Формируем даты для поиска (сегодня + неделя)
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+
+      // Отправляем подборку каждому пользователю
+      for (const { user, preferences } of usersWithPrefs) {
+        try {
+          // Проверяем, есть ли предпочтения
+          if (
+            !preferences.category_ids?.length &&
+            !preferences.price_min &&
+            !preferences.price_max
+          ) {
+            stats.noPreferences++;
+            continue;
+          }
+
+          // Формируем параметры поиска
+          const searchParams: any = {
+            dateFrom: today,
+            dateTo: nextWeek,
+          };
+
+          if (preferences.category_ids?.length) {
+            // Передаем все категории из предпочтений
+            searchParams.categoryId = preferences.category_ids;
+          }
+
+          if (preferences.price_min) {
+            searchParams.priceFrom = preferences.price_min;
+          }
+
+          if (preferences.price_max) {
+            searchParams.priceTo = preferences.price_max;
+          }
+
+          // Получаем все события с пагинацией
+          const events = await this.getAllEvents(searchParams);
+
+          if (!events.length) {
+            stats.noEvents++;
+            // Опционально: отправить сообщение, что нет событий
+            // await this.bot.telegram.sendMessage(
+            //   user.telegram_id,
+            //   '🎯 Сегодня нет новых мероприятий по вашим предпочтениям.'
+            // );
+            continue;
+          }
+
+          // Формируем сообщение
+          const eventsList = events
+            .slice(0, 5)
+            .map((event, idx) => {
+              const title = event.title || 'Без названия';
+              const price = event.price_from ? `${event.price_from} грн` : '—';
+              const dateFrom = event.date_time_from || event.date_time;
+              const date = dateFrom
+                ? new Date(dateFrom).toLocaleDateString('ru-RU', {
+                    day: 'numeric',
+                    month: 'long',
+                  })
+                : 'Дата не указана';
+
+              return `${idx + 1}. <b>${this.escapeHtml(title)}</b>\n   📅 ${date} | 💸 ${price}`;
+            })
+            .join('\n\n');
+
+          const message = `🌅 <b>Доброе утро!</b>
+
+🎯 <b>Подборка мероприятий для вас</b>
+
+Нашли ${events.length} мероприятий по вашим предпочтениям на ближайшую неделю:
+
+${eventsList}
+
+${events.length > 5 ? `\n... и ещё ${events.length - 5} мероприятий\n` : ''}
+🔍 Откройте бота и нажмите "🎯 Подборка для меня" для полного списка!`;
+
+          // Отправляем сообщение
+          await this.bot.telegram.sendMessage(user.telegram_id, message, {
+            parse_mode: 'HTML',
+          });
+
+          stats.sent++;
+          this.logger.log(
+            `Sent to ${user.name || user.telegram_id} (${events.length} events)`
+          );
+
+          // Задержка между отправками (избежать rate limits)
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error: any) {
+          stats.failed++;
+          this.logger.error(
+            `Failed to send to ${user.telegram_id}:`,
+            error.message
+          );
+        }
+      }
+
+      this.logger.log('Digest completed:', stats);
+    } catch (error) {
+      this.logger.error('Error during digest:', error);
+    }
+
+    return stats;
+  }
+
+  /**
+   * Escape HTML специальных символов
+   */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Остановить планировщик
+   */
+  onModuleDestroy() {
+    if (this.cronJob) {
+      this.cronJob.stop();
+      this.logger.log('Digest scheduler stopped');
+    }
+  }
+}

@@ -229,7 +229,7 @@ export class EventsService {
 
   async searchPaginated(input: {
     q?: string;
-    categoryId?: string;
+    categoryIds?: string[];
     venueName?: string;
     dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
     dateTo?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
@@ -255,8 +255,10 @@ export class EventsService {
       const p2 = `$${params.length}`;
       where.push(`(title ILIKE ${p1} OR description ILIKE ${p2})`);
     }
-    if (input.categoryId) {
-      add('category_id = $X', input.categoryId);
+    if (input.categoryIds && input.categoryIds.length > 0) {
+      // Поддержка множественных категорий через ANY
+      params.push(input.categoryIds);
+      where.push(`category_id = ANY($${params.length})`);
     }
     if (input.venueName && input.venueName.trim().length > 0) {
       // Robust match: case-insensitive, normalize Cyrillic/Latin lookalikes, and ignore punctuation

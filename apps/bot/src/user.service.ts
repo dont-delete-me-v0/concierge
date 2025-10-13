@@ -381,4 +381,77 @@ export class UserService {
       return false;
     }
   }
+
+  /**
+   * Получить всех пользователей с настроенными предпочтениями
+   */
+  async getAllUsersWithPreferences(): Promise<
+    Array<{ user: User; preferences: UserPreferences }>
+  > {
+    try {
+      const result = await this.db.query<{
+        user_id: number;
+        telegram_id: string;
+        name: string | null;
+        phone: string | null;
+        email: string | null;
+        subscription_type: string;
+        user_created_at: Date;
+        pref_id: number;
+        category_ids: string[] | null;
+        district_ids: string[] | null;
+        price_min: number | null;
+        price_max: number | null;
+        pref_created_at: Date;
+        pref_updated_at: Date;
+      }>(
+        `SELECT 
+          u.id as user_id, 
+          u.telegram_id, 
+          u.name, 
+          u.phone, 
+          u.email, 
+          u.subscription_type,
+          u.created_at as user_created_at,
+          up.id as pref_id,
+          up.category_ids,
+          up.district_ids,
+          up.price_min,
+          up.price_max,
+          up.created_at as pref_created_at,
+          up.updated_at as pref_updated_at
+        FROM users u
+        INNER JOIN user_preferences up ON u.id = up.user_id
+        WHERE up.category_ids IS NOT NULL 
+           OR up.district_ids IS NOT NULL 
+           OR up.price_min IS NOT NULL 
+           OR up.price_max IS NOT NULL`
+      );
+
+      return result.rows.map(row => ({
+        user: {
+          id: row.user_id,
+          telegram_id: row.telegram_id,
+          name: row.name ?? undefined,
+          phone: row.phone ?? undefined,
+          email: row.email ?? undefined,
+          subscription_type: row.subscription_type,
+          created_at: row.user_created_at,
+        },
+        preferences: {
+          id: row.pref_id,
+          user_id: row.user_id,
+          category_ids: row.category_ids ?? undefined,
+          district_ids: row.district_ids ?? undefined,
+          price_min: row.price_min ?? undefined,
+          price_max: row.price_max ?? undefined,
+          created_at: row.pref_created_at,
+          updated_at: row.pref_updated_at,
+        },
+      }));
+    } catch (error) {
+      this.logger.error('Failed to get users with preferences:', error);
+      return [];
+    }
+  }
 }
