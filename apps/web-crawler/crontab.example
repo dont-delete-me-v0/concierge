@@ -2,5 +2,9 @@ SHELL=/bin/bash
 PATH=/Users/usrname/.nvm/versions/node/v24.4.0/bin:/usr/local/bin:/usr/bin:/bin
 NODE_ENV=production
 
-# Каждые 3 часа
-0 */3 * * * cd /Users/usrname/code/concierge/apps/web-crawler && /Users/usrname/.nvm/versions/node/v24.4.0/bin/node dist/index.js config-concert-ua.json >> /Users/usrname/.crawler-logs/concerts.log 2>&1
+# Run concert.ua crawlers (concerts + theater) every 3 hours
+0 */3 * * * cd /Users/usrname/code/concierge/apps/web-crawler && ./run-concert-crawlers.sh >> /Users/usrname/.crawler-logs/crawler-runner.log 2>&1
+
+# Alternative: Run individual crawlers separately every 3 hours (commented out)
+# 0 */3 * * * cd /Users/usrname/code/concierge/apps/web-crawler && /Users/usrname/.nvm/versions/node/v24.4.0/bin/node dist/index.js config-concert-ua.json >> /Users/usrname/.crawler-logs/concerts.log 2>&1
+# 5 */3 * * * cd /Users/usrname/code/concierge/apps/web-crawler && /Users/usrname/.nvm/versions/node/v24.4.0/bin/node dist/index.js config-concert-ua-theather.json >> /Users/usrname/.crawler-logs/theater.log 2>&1
