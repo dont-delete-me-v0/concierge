@@ -3,6 +3,7 @@ import type { Context, Scenes } from 'telegraf';
 import { Markup } from 'telegraf';
 import { EventsApiService } from './events-api.service.js';
 import { formatEventCard, mainKeyboard, resolveEventUrl } from './keyboards.js';
+import { UserService } from './user.service.js';
 
 export interface SessionData {
   selectedCategories?: string[];
@@ -13,6 +14,9 @@ export interface SessionData {
   searchParams?: any; // Last search params for lazy loading
   totalEvents?: number; // Total count from server
   searchToken?: string; // isolates pagination callbacks per search
+  profileEditMode?: 'phone' | 'email' | 'price' | 'categories' | null; // Current profile edit mode
+  tempCategorySelection?: string[]; // Temporary category selection for preferences
+  categoriesList?: Array<{ id: string; name: string }>; // Categories list for profile editing
 }
 
 export type BotContext = Context &
@@ -22,6 +26,7 @@ export type BotContext = Context &
 export class BotUpdate {
   constructor(
     private readonly eventsApi: EventsApiService,
+    private readonly userService: UserService,
     @InjectBot() private readonly bot: any
   ) {}
 
@@ -31,6 +36,16 @@ export class BotUpdate {
 
   @Start()
   async onStart(@Ctx() ctx: BotContext) {
+    // Автоматическая регистрация пользователя
+    const telegramId = String(ctx.from?.id || '');
+    const name = ctx.from?.first_name
+      ? `${ctx.from.first_name}${ctx.from.last_name ? ' ' + ctx.from.last_name : ''}`
+      : undefined;
+
+    if (telegramId) {
+      await this.userService.registerOrGetUser(telegramId, name);
+    }
+
     await ctx.reply(
       'Привет! Я помогу найти мероприятия. Выберите действие ниже.',
       mainKeyboard()
@@ -122,6 +137,126 @@ export class BotUpdate {
     );
   }
 
+  @Hears('⭐️ Избранное')
+  async onFavorites(@Ctx() ctx: BotContext) {
+    const telegramId = String(ctx.from?.id || '');
+    if (!telegramId) {
+      await ctx.reply('Не удалось определить пользователя.');
+      return;
+    }
+
+    const favoriteIds = await this.userService.getFavorites(telegramId);
+    if (!favoriteIds.length) {
+      await ctx.reply('У вас пока нет избранных мероприятий.');
+      return;
+    }
+
+    // Загружаем полные данные о событиях
+    const events: any[] = [];
+    for (const id of favoriteIds) {
+      const event = await this.eventsApi.getById(id);
+      if (event) events.push(event);
+    }
+
+    if (!events.length) {
+      await ctx.reply('Не удалось загрузить избранные мероприятия.');
+      return;
+    }
+
+    ctx.session.events = events;
+    ctx.session.totalEvents = events.length;
+    ctx.session.searchParams = { favoriteIds }; // Сохраняем для возможной перезагрузки
+    ctx.session.currentIndex = 0;
+    ctx.session.view = 'card';
+    ctx.session.searchToken = this.generateSearchToken();
+    const first = events[0];
+    await ctx.replyWithHTML(
+      formatEventCard(first),
+      await this.buildCardKeyboard(
+        first,
+        0,
+        events.length,
+        ctx.session.searchToken,
+        ctx
+      )
+    );
+  }
+
+  @Hears('👤 Профиль')
+  async onProfile(@Ctx() ctx: BotContext) {
+    const telegramId = String(ctx.from?.id || '');
+    if (!telegramId) {
+      await ctx.reply('Не удалось определить пользователя.');
+      return;
+    }
+
+    const user = await this.userService.getUserByTelegramId(telegramId);
+    const preferences = await this.userService.getUserPreferences(telegramId);
+
+    if (!user) {
+      await ctx.reply(
+        'Профиль не найден. Пожалуйста, начните с команды /start'
+      );
+      return;
+    }
+
+    // Форматируем информацию о профиле
+    const profileLines = [
+      '<b>👤 Ваш профиль</b>',
+      '',
+      `<b>Имя:</b> ${user.name || 'Не указано'}`,
+      `<b>Телефон:</b> ${user.phone || 'Не указан'}`,
+      `<b>Email:</b> ${user.email || 'Не указан'}`,
+      `<b>Подписка:</b> ${user.subscription_type}`,
+      '',
+      '<b>⚙️ Предпочтения</b>',
+    ];
+
+    if (preferences) {
+      if (preferences.category_ids && preferences.category_ids.length > 0) {
+        // Получаем названия категорий
+        const cats = await this.eventsApi.categories();
+        const selectedCatNames = preferences.category_ids
+          .map(id => cats.find(c => c.id === id)?.name)
+          .filter(Boolean);
+        profileLines.push(
+          `<b>Категории:</b> ${selectedCatNames.join(', ') || 'Не выбраны'}`
+        );
+      } else {
+        profileLines.push('<b>Категории:</b> Не выбраны');
+      }
+
+      if (preferences.price_min !== null || preferences.price_max !== null) {
+        const priceRange: string[] = [];
+        if (preferences.price_min)
+          priceRange.push(`от ${preferences.price_min} грн`);
+        if (preferences.price_max)
+          priceRange.push(`до ${preferences.price_max} грн`);
+        profileLines.push(
+          `<b>Цены:</b> ${priceRange.join(' ') || 'Не указаны'}`
+        );
+      } else {
+        profileLines.push('<b>Цены:</b> Не указаны');
+      }
+    } else {
+      profileLines.push('Предпочтения не настроены');
+    }
+
+    const profileText = profileLines.join('\n');
+
+    await ctx.replyWithHTML(
+      profileText,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📱 Изменить телефон', 'profile:edit:phone'),
+          Markup.button.callback('📧 Изменить email', 'profile:edit:email'),
+        ],
+        [Markup.button.callback('⚙️ Предпочтения', 'profile:prefs:view')],
+        [Markup.button.callback('🔄 Обновить', 'profile:refresh')],
+      ])
+    );
+  }
+
   @Hears('⚡️ Что сегодня?')
   async onToday(@Ctx() ctx: BotContext) {
     const now = new Date();
@@ -146,7 +281,13 @@ export class BotUpdate {
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
-      this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
+      await this.buildCardKeyboard(
+        first,
+        0,
+        total,
+        ctx.session.searchToken,
+        ctx
+      )
     );
   }
 
@@ -190,6 +331,459 @@ export class BotUpdate {
       return;
     }
 
+    // Profile actions
+    if (data.startsWith('profile:')) {
+      const parts = data.split(':');
+      const profileAction = parts[1];
+      const subAction = parts[2];
+
+      if (profileAction === 'refresh') {
+        // Refresh profile - call onProfile but edit message
+        const telegramId = String(ctx.from?.id || '');
+        const user = await this.userService.getUserByTelegramId(telegramId);
+        const preferences =
+          await this.userService.getUserPreferences(telegramId);
+
+        if (!user) {
+          await ctx.answerCbQuery('Профиль не найден');
+          return;
+        }
+
+        const profileLines = [
+          '<b>👤 Ваш профиль</b>',
+          '',
+          `<b>Имя:</b> ${user.name || 'Не указано'}`,
+          `<b>Телефон:</b> ${user.phone || 'Не указан'}`,
+          `<b>Email:</b> ${user.email || 'Не указан'}`,
+          `<b>Подписка:</b> ${user.subscription_type}`,
+          '',
+          '<b>⚙️ Предпочтения</b>',
+        ];
+
+        if (preferences) {
+          if (preferences.category_ids && preferences.category_ids.length > 0) {
+            const cats = await this.eventsApi.categories();
+            const selectedCatNames = preferences.category_ids
+              .map(id => cats.find(c => c.id === id)?.name)
+              .filter(Boolean);
+            profileLines.push(
+              `<b>Категории:</b> ${selectedCatNames.join(', ') || 'Не выбраны'}`
+            );
+          } else {
+            profileLines.push('<b>Категории:</b> Не выбраны');
+          }
+
+          if (
+            preferences.price_min !== null ||
+            preferences.price_max !== null
+          ) {
+            const priceRange: string[] = [];
+            if (preferences.price_min)
+              priceRange.push(`от ${preferences.price_min} грн`);
+            if (preferences.price_max)
+              priceRange.push(`до ${preferences.price_max} грн`);
+            profileLines.push(
+              `<b>Цены:</b> ${priceRange.join(' ') || 'Не указаны'}`
+            );
+          } else {
+            profileLines.push('<b>Цены:</b> Не указаны');
+          }
+        } else {
+          profileLines.push('Предпочтения не настроены');
+        }
+
+        await ctx.editMessageText(profileLines.join('\n'), {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '📱 Изменить телефон',
+                  callback_data: 'profile:edit:phone',
+                },
+                {
+                  text: '📧 Изменить email',
+                  callback_data: 'profile:edit:email',
+                },
+              ],
+              [
+                {
+                  text: '⚙️ Предпочтения',
+                  callback_data: 'profile:prefs:view',
+                },
+              ],
+              [{ text: '🔄 Обновить', callback_data: 'profile:refresh' }],
+            ],
+          },
+        });
+        await ctx.answerCbQuery('Обновлено');
+        return;
+      }
+
+      if (profileAction === 'prefs' && subAction === 'view') {
+        // Показываем меню предпочтений
+        const telegramId = String(ctx.from?.id || '');
+        const preferences =
+          await this.userService.getUserPreferences(telegramId);
+
+        const prefsLines = ['<b>⚙️ Ваши предпочтения</b>', ''];
+
+        if (preferences) {
+          // Категории
+          if (preferences.category_ids && preferences.category_ids.length > 0) {
+            const cats = await this.eventsApi.categories();
+            const selectedCatNames = preferences.category_ids
+              .map(id => cats.find(c => c.id === id)?.name)
+              .filter(Boolean);
+            prefsLines.push(
+              `<b>🎭 Категории:</b>\n${selectedCatNames.join(', ')}`
+            );
+          } else {
+            prefsLines.push('<b>🎭 Категории:</b> Не выбраны');
+          }
+
+          prefsLines.push('');
+
+          // Цены
+          if (
+            preferences.price_min !== null ||
+            preferences.price_max !== null
+          ) {
+            const priceRange: string[] = [];
+            if (preferences.price_min)
+              priceRange.push(`от ${preferences.price_min} грн`);
+            if (preferences.price_max)
+              priceRange.push(`до ${preferences.price_max} грн`);
+            prefsLines.push(`<b>💰 Цены:</b>\n${priceRange.join(' ')}`);
+          } else {
+            prefsLines.push('<b>💰 Цены:</b> Не указаны');
+          }
+        } else {
+          prefsLines.push('Предпочтения не настроены');
+        }
+
+        await ctx.editMessageText(prefsLines.join('\n'), {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: '🎭 Изменить категории',
+                  callback_data: 'profile:edit:categories',
+                },
+              ],
+              [
+                {
+                  text: '💰 Изменить цены',
+                  callback_data: 'profile:edit:price',
+                },
+              ],
+              [
+                {
+                  text: '◀️ Назад к профилю',
+                  callback_data: 'profile:refresh',
+                },
+              ],
+            ],
+          },
+        });
+        await ctx.answerCbQuery();
+        return;
+      }
+
+      if (profileAction === 'edit') {
+        if (subAction === 'phone') {
+          ctx.session.profileEditMode = 'phone';
+          await ctx.editMessageText(
+            'Введите ваш номер телефона в формате +380XXXXXXXXX:'
+          );
+          await ctx.answerCbQuery();
+          return;
+        }
+
+        if (subAction === 'email') {
+          ctx.session.profileEditMode = 'email';
+          await ctx.editMessageText('Введите ваш email:');
+          await ctx.answerCbQuery();
+          return;
+        }
+
+        if (subAction === 'price') {
+          ctx.session.profileEditMode = 'price';
+          await ctx.editMessageText(
+            'Введите диапазон цен в формате:\n' +
+              '- 100-500 (от 100 до 500 грн)\n' +
+              '- 200 (от 200 грн)\n' +
+              '- -300 (до 300 грн)\n' +
+              '- 0 (сбросить)'
+          );
+          await ctx.answerCbQuery();
+          return;
+        }
+
+        if (subAction === 'categories') {
+          const cats = await this.eventsApi.categories();
+          if (!cats.length) {
+            await ctx.answerCbQuery('Категории не найдены');
+            return;
+          }
+
+          const preferences = await this.userService.getUserPreferences(
+            String(ctx.from?.id || '')
+          );
+          const selectedIds = preferences?.category_ids || [];
+          ctx.session.tempCategorySelection = [...selectedIds];
+          ctx.session.profileEditMode = 'categories';
+          ctx.session.categoriesList = cats; // Сохраняем список категорий в сессии
+
+          const rows: any[] = [];
+          for (let i = 0; i < cats.length; i += 2) {
+            const row: { text: string; callback_data: string }[] = [];
+            for (let j = 0; j < 2 && i + j < cats.length; j++) {
+              const catIndex = i + j;
+              const cat = cats[catIndex];
+              const isSelected = selectedIds.includes(cat.id);
+              row.push({
+                text: `${isSelected ? '✅' : '⬜'} ${cat.name}`,
+                callback_data: `profile:toggle:cat:${catIndex}`, // Используем индекс вместо ID
+              });
+            }
+            rows.push(row);
+          }
+          rows.push([
+            { text: '💾 Сохранить', callback_data: 'profile:save:categories' },
+          ]);
+          rows.push([
+            { text: '❌ Отмена', callback_data: 'profile:prefs:view' },
+          ]);
+
+          await ctx.editMessageText('Выберите интересующие категории:', {
+            reply_markup: { inline_keyboard: rows },
+          });
+          await ctx.answerCbQuery();
+          return;
+        }
+      }
+
+      if (profileAction === 'toggle' && subAction === 'cat') {
+        const catIndexStr = parts[3];
+        const catIndex = parseInt(catIndexStr, 10);
+
+        if (!ctx.session.categoriesList || isNaN(catIndex)) {
+          await ctx.answerCbQuery('Ошибка: категория не найдена');
+          return;
+        }
+
+        const cat = ctx.session.categoriesList[catIndex];
+        if (!cat) {
+          await ctx.answerCbQuery('Ошибка: категория не найдена');
+          return;
+        }
+
+        if (!ctx.session.tempCategorySelection) {
+          ctx.session.tempCategorySelection = [];
+        }
+
+        // Переключаем выбор категории по её ID
+        const selectedIndex = ctx.session.tempCategorySelection.indexOf(cat.id);
+        if (selectedIndex > -1) {
+          ctx.session.tempCategorySelection.splice(selectedIndex, 1);
+        } else {
+          ctx.session.tempCategorySelection.push(cat.id);
+        }
+
+        // Update inline keyboard
+        const cats = ctx.session.categoriesList;
+        const selectedIds = ctx.session.tempCategorySelection;
+        const rows: any[] = [];
+        for (let i = 0; i < cats.length; i += 2) {
+          const row: { text: string; callback_data: string }[] = [];
+          for (let j = 0; j < 2 && i + j < cats.length; j++) {
+            const idx = i + j;
+            const category = cats[idx];
+            const isSelected = selectedIds.includes(category.id);
+            row.push({
+              text: `${isSelected ? '✅' : '⬜'} ${category.name}`,
+              callback_data: `profile:toggle:cat:${idx}`, // Используем индекс
+            });
+          }
+          rows.push(row);
+        }
+        rows.push([
+          { text: '💾 Сохранить', callback_data: 'profile:save:categories' },
+        ]);
+        rows.push([{ text: '❌ Отмена', callback_data: 'profile:prefs:view' }]);
+
+        await ctx.editMessageReplyMarkup({ inline_keyboard: rows });
+        await ctx.answerCbQuery();
+        return;
+      }
+
+      if (profileAction === 'save' && subAction === 'categories') {
+        const telegramId = String(ctx.from?.id || '');
+        const categoryIds = ctx.session.tempCategorySelection || [];
+
+        const success = await this.userService.updateCategoryPreferences(
+          telegramId,
+          categoryIds
+        );
+
+        if (success) {
+          ctx.session.profileEditMode = null;
+          ctx.session.tempCategorySelection = undefined;
+          ctx.session.categoriesList = undefined; // Очищаем список категорий
+          await ctx.editMessageText('✅ Предпочтения по категориям сохранены!');
+          await ctx.answerCbQuery();
+
+          // Показываем обновленное меню предпочтений через секунду
+          setTimeout(async () => {
+            const preferences =
+              await this.userService.getUserPreferences(telegramId);
+
+            const prefsLines = ['<b>⚙️ Ваши предпочтения</b>', ''];
+
+            if (preferences) {
+              // Категории
+              if (
+                preferences.category_ids &&
+                preferences.category_ids.length > 0
+              ) {
+                const cats = await this.eventsApi.categories();
+                const selectedCatNames = preferences.category_ids
+                  .map(id => cats.find(c => c.id === id)?.name)
+                  .filter(Boolean);
+                prefsLines.push(
+                  `<b>🎭 Категории:</b>\n${selectedCatNames.join(', ')}`
+                );
+              } else {
+                prefsLines.push('<b>🎭 Категории:</b> Не выбраны');
+              }
+
+              prefsLines.push('');
+
+              // Цены
+              if (
+                preferences.price_min !== null ||
+                preferences.price_max !== null
+              ) {
+                const priceRange: string[] = [];
+                if (preferences.price_min)
+                  priceRange.push(`от ${preferences.price_min} грн`);
+                if (preferences.price_max)
+                  priceRange.push(`до ${preferences.price_max} грн`);
+                prefsLines.push(`<b>💰 Цены:</b>\n${priceRange.join(' ')}`);
+              } else {
+                prefsLines.push('<b>💰 Цены:</b> Не указаны');
+              }
+            } else {
+              prefsLines.push('Предпочтения не настроены');
+            }
+
+            await ctx.replyWithHTML(
+              prefsLines.join('\n'),
+              Markup.inlineKeyboard([
+                [
+                  {
+                    text: '🎭 Изменить категории',
+                    callback_data: 'profile:edit:categories',
+                  },
+                ],
+                [
+                  {
+                    text: '💰 Изменить цены',
+                    callback_data: 'profile:edit:price',
+                  },
+                ],
+                [
+                  {
+                    text: '◀️ Назад к профилю',
+                    callback_data: 'profile:refresh',
+                  },
+                ],
+              ])
+            );
+          }, 1000);
+        } else {
+          await ctx.answerCbQuery('Ошибка при сохранении');
+        }
+        return;
+      }
+    }
+
+    // Favorites: add/remove
+    if (action === 'fav' && (args[0] === 'add' || args[0] === 'remove')) {
+      const telegramId = String(ctx.from?.id || '');
+      const eventToken = args[1];
+
+      if (!telegramId || !eventToken) {
+        await ctx.answerCbQuery('Ошибка обработки');
+        return;
+      }
+
+      // Разрешаем короткий токен обратно в полный ID события
+      const eventId = this.eventsApi.resolveEventId(eventToken);
+      if (!eventId) {
+        await ctx.answerCbQuery('Событие не найдено');
+        return;
+      }
+
+      if (args[0] === 'add') {
+        const success = await this.userService.addFavorite(telegramId, eventId);
+        if (success) {
+          await ctx.answerCbQuery('✅ Добавлено в избранное');
+          // Обновляем кнопки на карточке
+          const events = ctx.session.events ?? [];
+          const idx = ctx.session.currentIndex ?? 0;
+          const total = ctx.session.totalEvents ?? events.length;
+          const e = events[idx];
+          if (e) {
+            await ctx.editMessageReplyMarkup(
+              (
+                await this.buildCardKeyboard(
+                  e,
+                  idx,
+                  total,
+                  ctx.session.searchToken ?? '',
+                  ctx
+                )
+              ).reply_markup
+            );
+          }
+        } else {
+          await ctx.answerCbQuery('Ошибка при добавлении');
+        }
+      } else {
+        const success = await this.userService.removeFavorite(
+          telegramId,
+          eventId
+        );
+        if (success) {
+          await ctx.answerCbQuery('❌ Удалено из избранного');
+          // Обновляем кнопки на карточке
+          const events = ctx.session.events ?? [];
+          const idx = ctx.session.currentIndex ?? 0;
+          const total = ctx.session.totalEvents ?? events.length;
+          const e = events[idx];
+          if (e) {
+            await ctx.editMessageReplyMarkup(
+              (
+                await this.buildCardKeyboard(
+                  e,
+                  idx,
+                  total,
+                  ctx.session.searchToken ?? '',
+                  ctx
+                )
+              ).reply_markup
+            );
+          }
+        } else {
+          await ctx.answerCbQuery('Ошибка при удалении');
+        }
+      }
+      return;
+    }
+
     // Navigation: prev/next with lazy loading
     if (action === 'nav' && (args[0] === 'p' || args[0] === 'n')) {
       const events = ctx.session.events ?? [];
@@ -227,12 +821,13 @@ export class BotUpdate {
       }
       await ctx.editMessageText(formatEventCard(e), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(
+        ...(await this.buildCardKeyboard(
           e,
           nextIndex,
           total,
-          ctx.session.searchToken ?? ''
-        ),
+          ctx.session.searchToken ?? '',
+          ctx
+        )),
       });
       await ctx.answerCbQuery();
       return;
@@ -254,12 +849,13 @@ export class BotUpdate {
         ctx.session.view = 'card';
         await ctx.editMessageText(formatEventCard(e), {
           parse_mode: 'HTML',
-          ...this.buildCardKeyboard(
+          ...(await this.buildCardKeyboard(
             e,
             idx,
             total,
-            ctx.session.searchToken ?? ''
-          ),
+            ctx.session.searchToken ?? '',
+            ctx
+          )),
         });
       }
       await ctx.answerCbQuery();
@@ -301,7 +897,13 @@ export class BotUpdate {
       }
       await ctx.editMessageText(formatEventCard(e), {
         parse_mode: 'HTML',
-        ...this.buildCardKeyboard(e, idx, total, ctx.session.searchToken ?? ''),
+        ...(await this.buildCardKeyboard(
+          e,
+          idx,
+          total,
+          ctx.session.searchToken ?? '',
+          ctx
+        )),
       });
       await ctx.answerCbQuery();
       return;
@@ -375,7 +977,13 @@ export class BotUpdate {
         const first = events[0];
         await ctx.editMessageText(formatEventCard(first), {
           parse_mode: 'HTML',
-          ...this.buildCardKeyboard(first, 0, total, ctx.session.searchToken),
+          ...(await this.buildCardKeyboard(
+            first,
+            0,
+            total,
+            ctx.session.searchToken,
+            ctx
+          )),
         });
         await ctx.answerCbQuery();
         return;
@@ -410,7 +1018,13 @@ export class BotUpdate {
         const first = events[0];
         await ctx.editMessageText(formatEventCard(first), {
           parse_mode: 'HTML',
-          ...this.buildCardKeyboard(first, 0, total, ctx.session.searchToken),
+          ...(await this.buildCardKeyboard(
+            first,
+            0,
+            total,
+            ctx.session.searchToken,
+            ctx
+          )),
         });
         await ctx.answerCbQuery();
         return;
@@ -421,8 +1035,119 @@ export class BotUpdate {
   @On('text')
   async onText(@Ctx() ctx: BotContext) {
     const mode = ctx.session.searchMode ?? null;
+    const profileMode = ctx.session.profileEditMode ?? null;
     const text = String((ctx.message as any)?.text ?? '').trim();
     if (!text || text.startsWith('/')) return;
+
+    // Profile edit modes
+    if (profileMode === 'phone') {
+      const telegramId = String(ctx.from?.id || '');
+      const phoneRegex = /^\+?\d{10,15}$/;
+
+      if (!phoneRegex.test(text.replace(/[\s-]/g, ''))) {
+        await ctx.reply(
+          'Некорректный формат телефона. Используйте формат: +380XXXXXXXXX'
+        );
+        return;
+      }
+
+      const success = await this.userService.updateUserProfile(telegramId, {
+        phone: text,
+      });
+      if (success) {
+        ctx.session.profileEditMode = null;
+        await ctx.reply('✅ Телефон успешно обновлен!', mainKeyboard());
+      } else {
+        await ctx.reply('❌ Ошибка при обновлении телефона', mainKeyboard());
+      }
+      return;
+    }
+
+    if (profileMode === 'email') {
+      const telegramId = String(ctx.from?.id || '');
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!emailRegex.test(text)) {
+        await ctx.reply(
+          'Некорректный формат email. Введите правильный email адрес.'
+        );
+        return;
+      }
+
+      const success = await this.userService.updateUserProfile(telegramId, {
+        email: text,
+      });
+      if (success) {
+        ctx.session.profileEditMode = null;
+        await ctx.reply('✅ Email успешно обновлен!', mainKeyboard());
+      } else {
+        await ctx.reply('❌ Ошибка при обновлении email', mainKeyboard());
+      }
+      return;
+    }
+
+    if (profileMode === 'price') {
+      const telegramId = String(ctx.from?.id || '');
+
+      // Сброс цен
+      if (text === '0') {
+        const success = await this.userService.updatePricePreferences(
+          telegramId,
+          undefined,
+          undefined
+        );
+        if (success) {
+          ctx.session.profileEditMode = null;
+          await ctx.reply('✅ Ценовые предпочтения сброшены!', mainKeyboard());
+        } else {
+          await ctx.reply('❌ Ошибка при сбросе', mainKeyboard());
+        }
+        return;
+      }
+
+      const priceMatch = text.match(/^(-?\d+)(?:-(-?\d+))?$/);
+      if (!priceMatch) {
+        await ctx.reply(
+          'Неверный формат цены. Используйте:\n- 100-500\n- 200\n- -300\n- 0 (сброс)'
+        );
+        return;
+      }
+
+      const [, fromStr, toStr] = priceMatch;
+      let priceMin: number | undefined;
+      let priceMax: number | undefined;
+
+      if (fromStr.startsWith('-')) {
+        // Only upper bound: -300 means up to 300
+        priceMax = Math.abs(Number(fromStr));
+      } else if (toStr) {
+        // Range: 100-500
+        priceMin = Number(fromStr);
+        priceMax = Number(toStr);
+      } else {
+        // Only lower bound: 200 means from 200
+        priceMin = Number(fromStr);
+      }
+
+      const success = await this.userService.updatePricePreferences(
+        telegramId,
+        priceMin,
+        priceMax
+      );
+      if (success) {
+        ctx.session.profileEditMode = null;
+        const rangeStr: string[] = [];
+        if (priceMin) rangeStr.push(`от ${priceMin} грн`);
+        if (priceMax) rangeStr.push(`до ${priceMax} грн`);
+        await ctx.reply(
+          `✅ Ценовые предпочтения обновлены: ${rangeStr.join(' ')}`,
+          mainKeyboard()
+        );
+      } else {
+        await ctx.reply('❌ Ошибка при обновлении', mainKeyboard());
+      }
+      return;
+    }
     // Manual date input (supports both date and datetime)
     const manualDateMatch = text.match(
       /^(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?)(?:\s*[–—-]\s*(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?)?))?$/
@@ -461,7 +1186,13 @@ export class BotUpdate {
       const first = events[0];
       await ctx.replyWithHTML(
         formatEventCard(first),
-        this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
+        await this.buildCardKeyboard(
+          first,
+          0,
+          total,
+          ctx.session.searchToken,
+          ctx
+        )
       );
       return;
     }
@@ -503,7 +1234,13 @@ export class BotUpdate {
       const first = events[0];
       await ctx.replyWithHTML(
         formatEventCard(first),
-        this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
+        await this.buildCardKeyboard(
+          first,
+          0,
+          total,
+          ctx.session.searchToken,
+          ctx
+        )
       );
       return;
     }
@@ -528,15 +1265,22 @@ export class BotUpdate {
     const first = events[0];
     await ctx.replyWithHTML(
       formatEventCard(first),
-      this.buildCardKeyboard(first, 0, total, ctx.session.searchToken)
+      await this.buildCardKeyboard(
+        first,
+        0,
+        total,
+        ctx.session.searchToken,
+        ctx
+      )
     );
   }
 
-  private buildCardKeyboard(
+  private async buildCardKeyboard(
     e: import('./events-api.service.js').EventItem,
     index: number,
     total: number,
-    token?: string
+    token?: string,
+    ctx?: BotContext
   ) {
     const t = token ? `t:${token}:` : '';
     const navRow = [
@@ -544,11 +1288,32 @@ export class BotUpdate {
       Markup.button.callback(`${index + 1}/${total}`, `${t}noop`),
       Markup.button.callback('▶️', `${t}nav:n`),
     ];
+
+    // Проверяем, в избранном ли событие
+    let isFav = false;
+    if (ctx?.from?.id) {
+      const telegramId = String(ctx.from.id);
+      isFav = await this.userService.isFavorite(telegramId, e.id);
+    }
+
+    // Используем короткий токен вместо полного ID (callback_data ограничен 64 байтами)
+    const eventToken = this.eventsApi.tokenForEventId(e.id);
+    const favButton = isFav
+      ? Markup.button.callback(
+          '💔 Удалить из избранного',
+          `${t}fav:remove:${eventToken}`
+        )
+      : Markup.button.callback(
+          '⭐️ Добавить в избранное',
+          `${t}fav:add:${eventToken}`
+        );
+
     const listRow = [Markup.button.callback('📋 Список', `${t}view:list`)];
     const abs = resolveEventUrl(e.source_url);
     const openRow = abs ? [Markup.button.url('🔗 Открыть', abs)] : [];
     return Markup.inlineKeyboard([
       navRow,
+      [favButton],
       listRow,
       ...(openRow.length ? [openRow] : []),
     ]);

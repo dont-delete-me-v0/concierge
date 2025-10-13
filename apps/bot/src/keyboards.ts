@@ -2,7 +2,11 @@ import { Markup } from 'telegraf';
 import type { EventItem } from './events-api.service.js';
 
 export function mainKeyboard() {
-  return Markup.keyboard([['🔍 Поиск'], ['⚡️ Что сегодня?']]).resize();
+  return Markup.keyboard([
+    ['🔍 Поиск'],
+    ['⚡️ Что сегодня?'],
+    ['⭐️ Избранное', '👤 Профиль'],
+  ]).resize();
 }
 
 export function formatEventCard(e: EventItem): string {
