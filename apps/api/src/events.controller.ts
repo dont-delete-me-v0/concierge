@@ -36,6 +36,7 @@ export class EventsController {
   search(
     @Query('q') q?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('venueName') venueName?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
     @Query('priceFrom') priceFromStr?: string,
@@ -50,6 +51,7 @@ export class EventsController {
     console.log('[EventsController] /search received:', {
       q,
       categoryId,
+      venueName,
       dateFrom,
       dateTo,
       priceFrom,
@@ -60,6 +62,7 @@ export class EventsController {
     const result = this.events.searchPaginated({
       q,
       categoryId,
+      venueName,
       dateFrom,
       dateTo,
       priceFrom,

@@ -186,7 +186,10 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     // Force Redis for state when URL is available, otherwise fall back to JSON
     const useRedis =
       (process.env.REDIS_URL || 'redis://localhost:6379').length > 0;
-    const prefix = process.env.STATE_PREFIX || 'concert.ua';
+    const prefix =
+      (config as ScraperConfig & { state_prefix?: string }).state_prefix ||
+      process.env.STATE_PREFIX ||
+      'concert.ua';
 
     console.log(
       `🔍 Incremental mode enabled (Redis: ${useRedis ? '✅' : '❌'})`
@@ -292,17 +295,18 @@ async function runOnce(config: ScraperConfig): Promise<void> {
     }
 
     // Write output: new rows plus optionally updated rows
-    // Special case for Redis (no local items to diff): also send existing rows that have description
-    const descriptionUpdateRows: ExtractedRow[] = [];
+    // Special case for Redis (no local items to diff): also send existing rows that have description OR venue info
+    const minorUpdateRows: ExtractedRow[] = [];
     if (updatedItems.length > 0) {
       for (const { row } of updatedItems) {
         const desc = (row.description || '').toString().trim();
-        if (desc.length > 0) descriptionUpdateRows.push(row);
+        const venueTxt = (row.venue || row.venue_name || '').toString().trim();
+        if (desc.length > 0 || venueTxt.length > 0) minorUpdateRows.push(row);
       }
     }
     const outputRows = updateExisting
-      ? [...newRows, ...updatedRows, ...descriptionUpdateRows]
-      : [...newRows, ...descriptionUpdateRows];
+      ? [...newRows, ...updatedRows, ...minorUpdateRows]
+      : [...newRows, ...minorUpdateRows];
     const saveOutput =
       String(process.env.CRAWLER_SAVE_OUTPUT || '').toLowerCase() === 'true';
     if (saveOutput) {
@@ -413,29 +417,69 @@ async function runOnce(config: ScraperConfig): Promise<void> {
 
 async function main(): Promise<void> {
   try {
-    const configPath = process.argv[2] ?? 'config.json';
-    const raw = await readJsonConfig(configPath);
-    const validated = validateConfig(raw);
-    if (!validated.ok) {
-      console.error('Invalid config:');
-      for (const err of validated.errors) console.error(`- ${err}`);
+    const inputArg = process.argv[2] ?? 'config.json';
+
+    async function resolveConfigPaths(input: string): Promise<string[]> {
+      const tokens = input
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      const out: string[] = [];
+      for (const t of tokens) {
+        const abs = path.isAbsolute(t) ? t : path.join(process.cwd(), t);
+        try {
+          const st = await fs.stat(abs);
+          if (st.isDirectory()) {
+            const files = await fs.readdir(abs);
+            for (const f of files) {
+              if (f.toLowerCase().endsWith('.json')) {
+                out.push(path.join(abs, f));
+              }
+            }
+          } else {
+            out.push(abs);
+          }
+        } catch {
+          // treat as file path that may not exist; still try read later for clear error
+          out.push(abs);
+        }
+      }
+      return out;
+    }
+
+    const configPaths = await resolveConfigPaths(inputArg);
+    if (configPaths.length === 0) {
+      console.error('No config paths resolved.');
       process.exitCode = 1;
       return;
     }
-    const cfg = validated.config;
-    const retries = cfg.retries ?? 0;
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        console.log(`Run attempt ${attempt + 1}/${retries + 1}`);
-        await runOnce(cfg);
-        break;
-      } catch (err) {
-        console.error('Run failed:', err);
-        if (attempt === retries) {
-          process.exitCode = 1;
+
+    for (const configPath of configPaths) {
+      console.log(`\n==== Running config: ${configPath} ====`);
+      const raw = await readJsonConfig(configPath);
+      const validated = validateConfig(raw);
+      if (!validated.ok) {
+        console.error('Invalid config:');
+        for (const err of validated.errors) console.error(`- ${err}`);
+        // mark failure for this config and continue to next
+        process.exitCode = 1;
+        continue;
+      }
+      const cfg = validated.config;
+      const retries = cfg.retries ?? 0;
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          console.log(`Run attempt ${attempt + 1}/${retries + 1}`);
+          await runOnce(cfg);
           break;
+        } catch (err) {
+          console.error('Run failed:', err);
+          if (attempt === retries) {
+            process.exitCode = 1;
+            break;
+          }
+          await sleep(1000 * (attempt + 1));
         }
-        await sleep(1000 * (attempt + 1));
       }
     }
   } catch (err) {

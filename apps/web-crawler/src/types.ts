@@ -55,6 +55,8 @@ export interface ScraperConfig {
   incremental?: IncrementalConfig;
   // Optional static category to attach to every row
   category_name?: string;
+  // Optional Redis state namespace override per config
+  state_prefix?: string;
 }
 
 export interface ExtractedRow {
@@ -315,6 +317,13 @@ export function validateConfig(input: unknown): ValidationResult {
     errors.push('"category_name" must be a non-empty string when provided');
   }
   if (
+    obj.state_prefix !== undefined &&
+    (typeof obj.state_prefix !== 'string' ||
+      (obj.state_prefix as string).trim().length === 0)
+  ) {
+    errors.push('"state_prefix" must be a non-empty string when provided');
+  }
+  if (
     obj.proxyServer !== undefined &&
     (typeof obj.proxyServer !== 'string' || obj.proxyServer.length === 0)
   ) {
@@ -474,6 +483,7 @@ export function validateConfig(input: unknown): ValidationResult {
       updateExisting: (inc?.updateExisting as boolean | undefined) ?? false,
     },
     category_name: (obj.category_name as string | undefined) ?? undefined,
+    state_prefix: (obj.state_prefix as string | undefined) ?? undefined,
   };
 
   return { ok: true, config: normalized };

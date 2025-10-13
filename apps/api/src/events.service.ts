@@ -119,6 +119,14 @@ export class EventsService {
 
   async upsertMany(events: EventEntity[]): Promise<void> {
     if (events.length === 0) return;
+    // Deduplicate by id within the batch to avoid ON CONFLICT UPDATE affecting same row twice
+    const uniqueById = new Map<string, EventEntity>();
+    for (const e of events) {
+      if (!e?.id) continue;
+      uniqueById.set(e.id, e);
+    }
+    const uniq = Array.from(uniqueById.values());
+
     const cols = [
       'id',
       'title',
@@ -133,8 +141,8 @@ export class EventsService {
     ];
     const valuesSql: string[] = [];
     const params: unknown[] = [];
-    for (let i = 0; i < events.length; i++) {
-      const e = events[i];
+    for (let i = 0; i < uniq.length; i++) {
+      const e = uniq[i];
       const base = i * cols.length;
       valuesSql.push(
         `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10})`
@@ -160,7 +168,7 @@ export class EventsService {
         description = EXCLUDED.description,
         category_id = EXCLUDED.category_id,
         venue_id = EXCLUDED.venue_id,
-        date_time = EXCLUDED.date_time,
+        date_time = COALESCE(EXCLUDED.date_time, EXCLUDED.date_time_from),
         date_time_from = EXCLUDED.date_time_from,
         date_time_to = EXCLUDED.date_time_to,
         price_from = EXCLUDED.price_from,
@@ -196,9 +204,33 @@ export class EventsService {
     return rows as CategoryEntity[];
   }
 
+  async findVenueIdByFuzzy(text: string): Promise<string | null> {
+    if (!text || text.trim().length === 0) return null;
+    const fromChars = 'АВЕКМНОРСТХУавекмнорстху';
+    const toChars = 'ABEKMHOPCTXYabekmhopctxy';
+    const sql = `
+      WITH q AS (
+        SELECT LOWER(translate(regexp_replace($1, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}')) AS qnorm
+      )
+      SELECT v.id, v.name,
+             LENGTH(v.name) AS score
+      FROM public.venues v, q
+      WHERE
+        (
+          LOWER(translate(regexp_replace(v.name, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}')) LIKE '%' || q.qnorm || '%'
+          OR LOWER(translate(regexp_replace(COALESCE(v.address, ''), '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}')) LIKE '%' || q.qnorm || '%'
+        )
+      ORDER BY score DESC
+      LIMIT 1
+    `;
+    const { rows } = await this.db.query<{ id: string }>(sql, [text]);
+    return (rows?.[0]?.id ?? null) as string | null;
+  }
+
   async searchPaginated(input: {
     q?: string;
     categoryId?: string;
+    venueName?: string;
     dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
     dateTo?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
     priceFrom?: number;
@@ -225,6 +257,24 @@ export class EventsService {
     }
     if (input.categoryId) {
       add('category_id = $X', input.categoryId);
+    }
+    if (input.venueName && input.venueName.trim().length > 0) {
+      // Robust match: case-insensitive, normalize Cyrillic/Latin lookalikes, and ignore punctuation
+      const raw = input.venueName.trim();
+      params.push(raw);
+      const p1 = `$${params.length}`;
+      // same param reused
+      const fromChars = 'АВЕКМНОРСТХУавекмнорстху';
+      const toChars = 'ABEKMHOPCTXYabekmhopctxy';
+      const normExpr = (col: string) =>
+        `LOWER(translate(regexp_replace(${col}, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}'))`;
+      const normParam = `LOWER(translate(regexp_replace(${p1}, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}'))`;
+      where.push(
+        `(
+          ${normExpr('v.name')} ILIKE '%' || ${normParam} || '%' OR
+          ${normExpr("COALESCE(v.address, '')")} ILIKE '%' || ${normParam} || '%'
+        )`
+      );
     }
     if (input.dateFrom) {
       // Check if it's a full datetime or just date
@@ -288,7 +338,7 @@ export class EventsService {
     console.log('[EventsService] params:', params);
 
     // total
-    const totalSql = `SELECT COUNT(*)::int AS cnt FROM public.events ${whereSql}`;
+    const totalSql = `SELECT COUNT(*)::int AS cnt FROM public.events e LEFT JOIN public.venues v ON v.id = e.venue_id ${whereSql.replaceAll('category_id', 'e.category_id').replaceAll('COALESCE(date_time_from, date_time)', 'COALESCE(e.date_time_from, e.date_time)')}`;
     console.log('[EventsService] totalSql:', totalSql);
     const totalRes = await this.db.query(totalSql, params);
     const totalRow = (totalRes.rows?.[0] ?? { cnt: 0 }) as { cnt: number };
@@ -300,9 +350,10 @@ export class EventsService {
     itemsParams.push(input.limit);
     itemsParams.push(input.offset);
     const itemsSql = `
-      SELECT * FROM public.events
-      ${whereSql}
-      ${orderSql}
+      SELECT e.* FROM public.events e
+      LEFT JOIN public.venues v ON v.id = e.venue_id
+      ${whereSql.replaceAll('category_id', 'e.category_id').replaceAll('COALESCE(date_time_from, date_time)', 'COALESCE(e.date_time_from, e.date_time)')}
+      ${orderSql.replace('COALESCE(date_time_from, date_time)', 'COALESCE(e.date_time_from, e.date_time)')}
       LIMIT $${itemsParams.length - 1}
       OFFSET $${itemsParams.length}
     `;

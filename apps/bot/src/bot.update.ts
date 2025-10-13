@@ -9,7 +9,7 @@ export interface SessionData {
   events?: import('./events-api.service.js').EventItem[];
   currentIndex?: number;
   view?: 'card' | 'list';
-  searchMode?: 'name' | 'price' | null;
+  searchMode?: 'name' | 'price' | 'venue' | null;
   searchParams?: any; // Last search params for lazy loading
   totalEvents?: number; // Total count from server
 }
@@ -37,8 +37,9 @@ export class BotUpdate {
     await ctx.reply(
       'Выберите тип поиска:',
       Markup.keyboard([
-        ['По названию', 'По дате'],
-        ['По категории', 'По цене'],
+        ['По названию', 'По адресу'],
+        ['По категории', 'По дате'],
+        ['По цене'],
         ['⬅️ Назад'],
       ]).resize()
     );
@@ -54,6 +55,12 @@ export class BotUpdate {
   async onSearchByName(@Ctx() ctx: BotContext) {
     ctx.session.searchMode = 'name';
     await ctx.reply('Введите часть названия мероприятия:');
+  }
+
+  @Hears('По адресу')
+  async onSearchByVenue(@Ctx() ctx: BotContext) {
+    ctx.session.searchMode = 'venue';
+    await ctx.reply('Введите часть названия площадки (адрес/venue name):');
   }
 
   @Hears('По дате')
@@ -446,8 +453,11 @@ export class BotUpdate {
       return;
     }
 
-    if (mode !== 'name') return;
-    const searchParams = { q: text, limit: 10, offset: 0 };
+    if (mode !== 'name' && mode !== 'venue') return;
+    const searchParams =
+      mode === 'name'
+        ? { q: text, limit: 10, offset: 0 }
+        : { venueName: text, limit: 10, offset: 0 };
     const { items: events, total } = await this.eventsApi.search(searchParams);
     if (!events.length) {
       await ctx.reply('Ничего не найдено. Попробуйте уточнить запрос.');

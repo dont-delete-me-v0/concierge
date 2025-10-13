@@ -17,6 +17,7 @@ export interface EventItem {
 export interface SearchParams {
   q?: string;
   categoryId?: string;
+  venueName?: string;
   date?: 'today' | 'tomorrow' | 'week' | string; // ISO date
   dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
   dateTo?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
@@ -70,6 +71,7 @@ export class EventsApiService {
     const canServerSearch =
       Boolean(params.q) ||
       Boolean(params.categoryId) ||
+      Boolean(params.venueName) ||
       Boolean(params.dateFrom) ||
       Boolean(params.dateTo) ||
       params.priceFrom !== undefined ||
@@ -83,6 +85,7 @@ export class EventsApiService {
         const requestParams = {
           q: params.q,
           categoryId: params.categoryId,
+          venueName: params.venueName,
           dateFrom: params.dateFrom,
           dateTo: params.dateTo,
           priceFrom: params.priceFrom,

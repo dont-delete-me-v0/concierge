@@ -102,9 +102,14 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         typeof venueName === 'string' &&
         venueName.trim().length
       ) {
-        venueId = await this.events
-          .upsertVenue({ name: venueName.trim() })
-          .catch(() => null);
+        // Try fuzzy find existing venue first (handles punctuation/cyrillic-latin variants)
+        venueId =
+          (await this.events
+            .findVenueIdByFuzzy(venueName.trim())
+            .catch(() => null)) ||
+          (await this.events
+            .upsertVenue({ name: venueName.trim() })
+            .catch(() => null));
       }
 
       let categoryId: string | null = payload.category_id ?? null;
@@ -206,9 +211,13 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
             typeof venueName === 'string' &&
             venueName.trim().length
           ) {
-            venueId = await this.events
-              .upsertVenue({ name: venueName.trim() })
-              .catch(() => null);
+            venueId =
+              (await this.events
+                .findVenueIdByFuzzy(venueName.trim())
+                .catch(() => null)) ||
+              (await this.events
+                .upsertVenue({ name: venueName.trim() })
+                .catch(() => null));
           }
 
           let categoryId: string | null = p.category_id ?? null;
