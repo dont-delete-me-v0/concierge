@@ -46,53 +46,6 @@ export class DigestService implements OnModuleInit {
   }
 
   /**
-   * Получить все события с пагинацией
-   */
-  private async getAllEvents(searchParams: any): Promise<any[]> {
-    const allEvents: any[] = [];
-    let offset = 0;
-    const limit = 50;
-    let hasMore = true;
-
-    this.logger.log(
-      `[Digest] Starting pagination with params: ${JSON.stringify(searchParams)}`
-    );
-
-    while (hasMore) {
-      const { items, total } = await this.eventsApi.search({
-        ...searchParams,
-        limit,
-        offset,
-      });
-
-      this.logger.log(
-        `[Digest] Page fetched: offset=${offset}, items=${items.length}, total=${total}`
-      );
-
-      allEvents.push(...items);
-      offset += limit;
-
-      // Проверяем, есть ли еще события
-      hasMore = allEvents.length < total && items.length === limit;
-
-      this.logger.log(
-        `[Digest] hasMore=${hasMore} (collected=${allEvents.length}, total=${total}, lastPageSize=${items.length})`
-      );
-
-      // Защита от бесконечного цикла
-      if (offset > 1000) {
-        this.logger.warn('[Digest] Reached maximum offset limit (1000)');
-        break;
-      }
-    }
-
-    this.logger.log(
-      `[Digest] Pagination complete: collected ${allEvents.length} events`
-    );
-    return allEvents;
-  }
-
-  /**
    * Отправить ежедневную рассылку
    */
   async sendDailyDigest(): Promise<DigestStats> {
@@ -155,8 +108,12 @@ export class DigestService implements OnModuleInit {
             searchParams.priceTo = preferences.price_max;
           }
 
-          // Получаем все события с пагинацией
-          const events = await this.getAllEvents(searchParams);
+          // Получаем только первые 5 событий для показа + total для подсчета
+          const { items: events, total } = await this.eventsApi.search({
+            ...searchParams,
+            limit: 5,
+            offset: 0,
+          });
 
           if (!events.length) {
             stats.noEvents++;
@@ -168,9 +125,12 @@ export class DigestService implements OnModuleInit {
             continue;
           }
 
+          this.logger.log(
+            `Loaded ${events.length} events for display, total: ${total}`
+          );
+
           // Формируем сообщение
           const eventsList = events
-            .slice(0, 5)
             .map((event, idx) => {
               const title = event.title || 'Без названия';
               const price = event.price_from ? `${event.price_from} грн` : '—';
@@ -190,11 +150,11 @@ export class DigestService implements OnModuleInit {
 
 🎯 <b>Подборка мероприятий для вас</b>
 
-Нашли ${events.length} мероприятий по вашим предпочтениям на ближайшую неделю:
+Нашли ${total} мероприятий по вашим предпочтениям на ближайшую неделю:
 
 ${eventsList}
 
-${events.length > 5 ? `\n... и ещё ${events.length - 5} мероприятий\n` : ''}
+${total > 5 ? `\n... и ещё ${total - 5} мероприятий\n` : ''}
 🔍 Откройте бота и нажмите "🎯 Подборка для меня" для полного списка!`;
 
           // Отправляем сообщение
@@ -204,7 +164,7 @@ ${events.length > 5 ? `\n... и ещё ${events.length - 5} мероприяти
 
           stats.sent++;
           this.logger.log(
-            `Sent to ${user.name || user.telegram_id} (${events.length} events)`
+            `Sent to ${user.name || user.telegram_id} (${total} events, showing top 5)`
           );
 
           // Задержка между отправками (избежать rate limits)
