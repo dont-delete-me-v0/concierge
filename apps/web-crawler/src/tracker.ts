@@ -1,9 +1,25 @@
-type TrackKind = 'critical_error' | 'parsing_progress' | 'parsing_result_edit';
+type TrackKind =
+  | 'critical_error'
+  | 'parsing_progress'
+  | 'parsing_result_edit'
+  | 'scheduler_status'
+  | 'job_started'
+  | 'job_completed';
 
 interface TrackResponse {
   ok: boolean;
   message_id?: number;
   error?: unknown;
+}
+
+interface LogContext {
+  configName?: string;
+  timestamp?: string;
+  duration?: number;
+  itemsCount?: number;
+  newItems?: number;
+  updatedItems?: number;
+  errorDetails?: string;
 }
 
 const isEnabled = (): boolean => {
@@ -16,32 +32,144 @@ const isEnabled = (): boolean => {
 const apiBase = (): string =>
   String(process.env.API_BASE_URL || 'http://localhost:3000');
 
+function formatTimestamp(date: Date = new Date()): string {
+  return date.toLocaleString('uk-UA', {
+    timeZone: 'Europe/Kiev',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}г ${minutes % 60}хв ${seconds % 60}с`;
+  } else if (minutes > 0) {
+    return `${minutes}хв ${seconds % 60}с`;
+  } else {
+    return `${seconds}с`;
+  }
+}
+
+function buildMessage(text: string, context?: LogContext): string {
+  let message = text;
+
+  if (context) {
+    if (context.configName) {
+      message += `\n📋 Конфіг: ${context.configName}`;
+    }
+    if (context.timestamp) {
+      message += `\n🕐 Час: ${context.timestamp}`;
+    }
+    if (context.duration !== undefined) {
+      message += `\n⏱️ Тривалість: ${formatDuration(context.duration)}`;
+    }
+    if (context.itemsCount !== undefined) {
+      message += `\n📊 Всього елементів: ${context.itemsCount}`;
+    }
+    if (context.newItems !== undefined) {
+      message += `\n🆕 Нових: ${context.newItems}`;
+    }
+    if (context.updatedItems !== undefined && context.updatedItems > 0) {
+      message += `\n♻️ Оновлених: ${context.updatedItems}`;
+    }
+    if (context.errorDetails) {
+      message += `\n❌ Помилка: ${context.errorDetails}`;
+    }
+  }
+
+  return message;
+}
+
 async function postTrack(payload: {
   kind: TrackKind;
   text: string;
   messageId?: number;
+  context?: LogContext;
 }): Promise<TrackResponse> {
-  if (!isEnabled()) return { ok: true };
+  if (!isEnabled()) {
+    console.log(
+      '[Tracker] Telegram tracking disabled (TELEGRAM_TRACKING=false)'
+    );
+    return { ok: true };
+  }
+
+  const message = buildMessage(payload.text, payload.context);
+
+  // Always log to console
+  console.log(`[Tracker] ${payload.kind}: ${message}`);
+
   try {
     const res = await fetch(`${apiBase()}/telegram/track`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         kind: payload.kind,
-        text: payload.text,
+        text: message,
         messageId: payload.messageId,
       }),
     });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'Unknown error');
+      console.warn(
+        `[Tracker] Failed to send notification (HTTP ${res.status}):`,
+        errorText
+      );
+      return { ok: false, error: errorText };
+    }
+
     const data = (await res.json()) as TrackResponse;
+
+    if (!data.ok) {
+      console.warn(
+        '[Tracker] Notification sent but not delivered:',
+        data.error
+      );
+    }
+
     return data;
   } catch (err) {
-    // swallow tracking errors
+    const errorMessage = err instanceof Error ? err.message : String(err);
+
+    // Более информативное сообщение об ошибке
+    if (errorMessage.includes('ECONNREFUSED')) {
+      console.warn(
+        '[Tracker] Cannot connect to API server. Make sure API is running at:',
+        apiBase()
+      );
+      console.warn(
+        '[Tracker] To disable Telegram tracking: TELEGRAM_TRACKING=false'
+      );
+    } else if (errorMessage.includes('fetch')) {
+      console.warn('[Tracker] Network error:', errorMessage);
+    } else {
+      console.warn('[Tracker] Error sending notification:', errorMessage);
+    }
+
     return { ok: false, error: err };
   }
 }
 
-export async function trackProgressStart(text: string): Promise<number | null> {
-  const resp = await postTrack({ kind: 'parsing_progress', text });
+export async function trackProgressStart(
+  text: string,
+  context?: LogContext
+): Promise<number | null> {
+  const resp = await postTrack({
+    kind: 'parsing_progress',
+    text,
+    context: {
+      ...context,
+      timestamp: formatTimestamp(),
+    },
+  });
   return resp.ok && typeof resp.message_id === 'number'
     ? resp.message_id
     : null;
@@ -49,12 +177,96 @@ export async function trackProgressStart(text: string): Promise<number | null> {
 
 export async function trackProgressEdit(
   messageId: number | null,
-  text: string
+  text: string,
+  context?: LogContext
 ): Promise<void> {
   if (!messageId) return;
-  await postTrack({ kind: 'parsing_result_edit', text, messageId });
+  await postTrack({
+    kind: 'parsing_result_edit',
+    text,
+    messageId,
+    context,
+  });
 }
 
-export async function trackCriticalError(text: string): Promise<void> {
-  await postTrack({ kind: 'critical_error', text });
+export async function trackCriticalError(
+  text: string,
+  context?: LogContext
+): Promise<void> {
+  await postTrack({
+    kind: 'critical_error',
+    text,
+    context: {
+      ...context,
+      timestamp: formatTimestamp(),
+    },
+  });
+}
+
+export async function trackSchedulerStatus(
+  text: string,
+  context?: LogContext
+): Promise<void> {
+  await postTrack({
+    kind: 'scheduler_status',
+    text,
+    context: {
+      ...context,
+      timestamp: formatTimestamp(),
+    },
+  });
+}
+
+export async function trackJobStarted(
+  configName: string
+): Promise<number | null> {
+  const resp = await postTrack({
+    kind: 'job_started',
+    text: '🚀 Запущено парсинг завдання',
+    context: {
+      configName,
+      timestamp: formatTimestamp(),
+    },
+  });
+  return resp.ok && typeof resp.message_id === 'number'
+    ? resp.message_id
+    : null;
+}
+
+export async function trackJobCompleted(
+  messageId: number | null,
+  configName: string,
+  success: boolean,
+  stats?: {
+    duration: number;
+    itemsCount: number;
+    newItems: number;
+    updatedItems?: number;
+    errorDetails?: string;
+  }
+): Promise<void> {
+  const text = success
+    ? '✅ Завдання успішно виконано'
+    : '❌ Завдання завершилось з помилкою';
+
+  if (messageId) {
+    await postTrack({
+      kind: 'parsing_result_edit',
+      text,
+      messageId,
+      context: {
+        configName,
+        ...stats,
+      },
+    });
+  } else {
+    await postTrack({
+      kind: 'job_completed',
+      text,
+      context: {
+        configName,
+        ...stats,
+      },
+    });
+  }
 }

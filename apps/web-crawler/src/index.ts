@@ -2,13 +2,16 @@ import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { parseDateRangeUaToUtcIso, parseDateTimeUaToUtcIso } from './dateUtils';
+import {
+  parseDateRangeUaToUtcIso,
+  parseDateTimeUaToUtcIso,
+} from './dateUtils.js';
 import {
   computeRowHash,
   loadIncrementalState,
   saveIncrementalState,
 } from './incremental.js';
-import { parsePriceFrom } from './priceUtils';
+import { parsePriceFrom } from './priceUtils.js';
 import { RabbitPublisher } from './rabbitmq.js';
 import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState.js';
 import { ConfigurableScraper } from './scraper.js';

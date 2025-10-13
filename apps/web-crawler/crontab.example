@@ -1,0 +1,6 @@
+SHELL=/bin/bash
+PATH=/Users/usrname/.nvm/versions/node/v24.4.0/bin:/usr/local/bin:/usr/bin:/bin
+NODE_ENV=production
+
+# Каждые 3 часа
+0 */3 * * * cd /Users/usrname/code/concierge/apps/web-crawler && /Users/usrname/.nvm/versions/node/v24.4.0/bin/node dist/index.js config-concert-ua.json >> /Users/usrname/.crawler-logs/concerts.log 2>&1

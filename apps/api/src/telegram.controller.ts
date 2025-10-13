@@ -1,7 +1,13 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { TelegramService } from './telegram.service';
 
-type TrackKind = 'critical_error' | 'parsing_progress' | 'parsing_result_edit';
+type TrackKind =
+  | 'critical_error'
+  | 'parsing_progress'
+  | 'parsing_result_edit'
+  | 'scheduler_status'
+  | 'job_started'
+  | 'job_completed';
 
 interface TrackDto {
   kind: TrackKind;

@@ -10,6 +10,8 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "scheduler": "tsx src/scheduler.ts",
+    "scheduler:start": "node dist/scheduler.js",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
@@ -23,6 +25,7 @@
     "cheerio": "^1.0.0-rc.12",
     "dotenv": "^17.2.3",
     "luxon": "^3.7.2",
+    "node-cron": "^3.0.3",
     "playwright": "^1.55.1",
     "playwright-extra": "^4.3.6",
     "puppeteer": "^24.22.3",
@@ -35,6 +38,7 @@
     "@types/amqplib": "^0.10.7",
     "@types/luxon": "^3.7.1",
     "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11",
     "tsx": "^4.20.6",
     "typescript": "^5.9.2"
   }
