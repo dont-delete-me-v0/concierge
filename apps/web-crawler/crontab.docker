@@ -1,0 +1,14 @@
+# Crontab for web-crawler Docker container
+# Run concert.ua crawlers every 3 hours
+# Format: minute hour day month weekday command
+
+# Set shell and path
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+
+# Run crawlers every 3 hours (at 0:00, 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00)
+0 */3 * * * cd /app/apps/web-crawler && ./run-concert-crawlers.sh >> /var/log/crawler/cron.log 2>&1
+
+# Log cron health every hour
+0 * * * * echo "[$(date '+\%Y-\%m-\%d \%H:\%M:\%S')] Cron is alive" >> /var/log/crawler/health.log 2>&1
+
