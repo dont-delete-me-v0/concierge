@@ -470,6 +470,8 @@ export function validateConfig(input: unknown): ValidationResult {
     timeoutMs: (obj.timeoutMs as number | undefined) ?? 30000,
     headless: (obj.headless as boolean | undefined) ?? true,
     proxyServer: obj.proxyServer as string | undefined,
+    proxyFile: obj.proxyFile as string | undefined,
+    proxyRotation: obj.proxyRotation as 'random' | 'sequential' | undefined,
     retries: (obj.retries as number | undefined) ?? 0,
     userAgents: (obj.userAgents as string[] | undefined) ?? undefined,
     userAgentRotation:
