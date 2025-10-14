@@ -9,7 +9,7 @@
   ],
   "headless": true,
   "retries": 2,
-  "proxyFile": "crawl-configs/proxies.txt",
+  "proxyFile": "/app/apps/web-crawler/crawl-configs/proxies.txt",  
   "proxyRotation": "random",
   "retryOnStatusCodes": [
     429,

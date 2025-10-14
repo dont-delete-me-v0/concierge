@@ -6,7 +6,7 @@
   "waitFor": [".event-card", ".item-card"],
   "headless": true,
   "retries": 2,
-  "proxyFile": "crawl-configs/proxies.txt",
+  "proxyFile": "/app/apps/web-crawler/crawl-configs/proxies.txt",  
   "proxyRotation": "random",
   "retryOnStatusCodes": [429, 503, 403],
   "pagination": {
