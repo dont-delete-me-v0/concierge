@@ -21,8 +21,8 @@ RUN npm run build --workspace=apps/web-crawler
 # Production stage
 FROM node:18-alpine
 
-# Install cron, bash, and dependencies for Playwright
-RUN apk add --no-cache dcron bash curl \
+# Install bash and dependencies for Playwright
+RUN apk add --no-cache bash curl \
   # Install dependencies for Chromium
   && apk add --no-cache \
   chromium \
@@ -51,17 +51,13 @@ COPY --from=builder /app/node_modules ./node_modules
 # Copy web-crawler specific files
 COPY apps/web-crawler/crawl-configs ./apps/web-crawler/crawl-configs
 COPY apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-crawlers.sh
-COPY apps/web-crawler/crontab.docker /etc/crontabs/root
-
-# Ensure cron.log exists and is writable
-RUN mkdir -p /var/log/crawler && touch /var/log/crawler/cron.log && chmod 644 /var/log/crawler/cron.log
 
 # Give execution rights to the script
 RUN chmod +x /app/apps/web-crawler/run-concert-crawlers.sh
 
-# Set environment variables for cron
+# Set environment variables
 ENV NODE_ENV=production
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/app/node_modules/.bin"
 
-# Run cron daemon
-CMD ["crond", "-f", "-l", "2"]
+# Keep container running (will be called by system cron)
+CMD ["tail", "-f", "/dev/null"]
