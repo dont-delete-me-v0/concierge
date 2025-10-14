@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 WORKDIR /app
 
 # Copy package files
@@ -18,20 +18,34 @@ COPY eslint.config.js .prettierrc.js ./
 RUN npm run build --workspace=apps/web-crawler
 
 # Production stage
-FROM node:18-alpine
+FROM node:18-slim
 
-# Install bash and Chromium with all required dependencies
-RUN apk add --no-cache \
-  bash \
-  curl \
-  chromium \
-  nss \
-  freetype \
-  freetype-dev \
-  harfbuzz \
+# Install dependencies for Playwright
+RUN apt-get update && apt-get install -y \
+  wget \
   ca-certificates \
-  ttf-freefont \
-  font-noto-emoji
+  fonts-liberation \
+  libasound2 \
+  libatk-bridge2.0-0 \
+  libatk1.0-0 \
+  libatspi2.0-0 \
+  libcups2 \
+  libdbus-1-3 \
+  libdrm2 \
+  libgbm1 \
+  libgtk-3-0 \
+  libnspr4 \
+  libnss3 \
+  libwayland-client0 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libxkbcommon0 \
+  libxrandr2 \
+  xdg-utils \
+  libu2f-udev \
+  libvulkan1 \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -51,9 +65,8 @@ COPY apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-cra
 # Give execution rights to the script
 RUN chmod +x /app/apps/web-crawler/run-concert-crawlers.sh
 
-# Tell Playwright to use system Chromium instead of downloading its own
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Install Playwright browsers (with Debian this works reliably)
+RUN cd /app && npx playwright install chromium --with-deps
 
 # Set environment variables
 ENV NODE_ENV=production
