@@ -1,6 +1,5 @@
 # Build stage
 FROM node:18-alpine AS builder
-
 WORKDIR /app
 
 # Copy package files
@@ -21,17 +20,18 @@ RUN npm run build --workspace=apps/web-crawler
 # Production stage
 FROM node:18-alpine
 
-# Install bash and dependencies for Playwright
-RUN apk add --no-cache bash curl \
-  # Install dependencies for Chromium
-  && apk add --no-cache \
+# Install bash and Chromium with all required dependencies
+RUN apk add --no-cache \
+  bash \
+  curl \
   chromium \
   nss \
   freetype \
   freetype-dev \
   harfbuzz \
   ca-certificates \
-  ttf-freefont
+  ttf-freefont \
+  font-noto-emoji
 
 WORKDIR /app
 
@@ -51,8 +51,9 @@ COPY apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-cra
 # Give execution rights to the script
 RUN chmod +x /app/apps/web-crawler/run-concert-crawlers.sh
 
-# Install Playwright browsers
-RUN cd /app/apps/web-crawler && npx playwright install chromium
+# Tell Playwright to use system Chromium instead of downloading its own
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Set environment variables
 ENV NODE_ENV=production
