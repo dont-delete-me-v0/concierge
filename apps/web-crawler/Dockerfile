@@ -57,7 +57,7 @@ COPY apps/web-crawler/crontab.docker /etc/crontabs/root
 RUN mkdir -p /var/log/crawler && touch /var/log/crawler/cron.log && chmod 644 /var/log/crawler/cron.log
 
 # Give execution rights to the script
-RUN chmod +x /apps/web-crawler/run-concert-crawlers.sh
+RUN chmod +x /app/apps/web-crawler/run-concert-crawlers.sh
 
 # Set environment variables for cron
 ENV NODE_ENV=production
