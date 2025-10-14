@@ -1,5 +1,5 @@
 {
-  "url": "https://concert.ua/uk/catalog/kyiv/concerts/date-from=2025-10-07&date-till=2025-10-17",
+  "url": "https://concert.ua/uk/catalog/kyiv/concerts",
   "source_base_url": "https://concert.ua",
   "category_name": "concerts",
   "state_prefix": "concert.ua:kyiv:concerts",
