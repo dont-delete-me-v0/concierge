@@ -33,10 +33,6 @@ RUN apk add --no-cache bash curl \
   ca-certificates \
   ttf-freefont
 
-# Set environment variables for Playwright
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
-
 WORKDIR /app
 
 # Copy package files
@@ -54,6 +50,9 @@ COPY apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-cra
 
 # Give execution rights to the script
 RUN chmod +x /app/apps/web-crawler/run-concert-crawlers.sh
+
+# Install Playwright browsers
+RUN cd /app/apps/web-crawler && npx playwright install chromium
 
 # Set environment variables
 ENV NODE_ENV=production
