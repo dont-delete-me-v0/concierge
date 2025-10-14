@@ -12,12 +12,34 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./packages/database/init:/docker-entrypoint-initdb.d:ro
+      - ./packages/database/backups:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d postgres -h 127.0.0.1 -p 5432 || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 12
       start_period: 30s
+
+  db-backup:
+    image: postgres:latest
+    container_name: concierge-postgres-backup
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-concierge}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-0 2 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - ./packages/database/backups:/backups
+      - ./packages/database/backup-cron.sh:/backup-cron.sh:ro
+    command: /bin/bash /backup-cron.sh
+    networks:
+      - default
 
   pgadmin:
     image: dpage/pgadmin4:latest

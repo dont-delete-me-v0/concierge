@@ -10,3 +10,8 @@ coverage/
 .DS_Store
 .vscode/
 .idea/
+
+# Database backups
+packages/database/backups/
+*.sql
+*.sql.gz
