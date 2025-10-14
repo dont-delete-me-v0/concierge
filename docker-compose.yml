@@ -162,6 +162,7 @@ services:
       dockerfile: apps/web-crawler/Dockerfile
     container_name: concierge-web-crawler
     restart: unless-stopped
+    privileged: true 
     depends_on:
       rabbitmq:
         condition: service_healthy
