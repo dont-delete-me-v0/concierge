@@ -18,11 +18,24 @@ COPY eslint.config.js .prettierrc.js ./
 # Build the application
 RUN npm run build --workspace=apps/web-crawler
 
-# Production stage - используем образ с Playwright
-FROM mcr.microsoft.com/playwright:v1.55.1-focal
+# Production stage
+FROM node:18-alpine
 
-# Install cron and bash
-RUN apt-get update && apt-get install -y cron bash && rm -rf /var/lib/apt/lists/*
+# Install cron, bash, and dependencies for Playwright
+RUN apk add --no-cache dcron bash curl \
+  # Install dependencies for Chromium
+  && apk add --no-cache \
+  chromium \
+  nss \
+  freetype \
+  freetype-dev \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont
+
+# Set environment variables for Playwright
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 WORKDIR /app
 
