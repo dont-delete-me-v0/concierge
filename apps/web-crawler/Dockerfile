@@ -18,11 +18,11 @@ COPY eslint.config.js .prettierrc.js ./
 # Build the application
 RUN npm run build --workspace=apps/web-crawler
 
-# Production stage
-FROM node:18-alpine
+# Production stage - используем образ с Playwright
+FROM mcr.microsoft.com/playwright:v1.55.1-focal
 
 # Install cron and bash
-RUN apk add --no-cache dcron bash curl
+RUN apt-get update && apt-get install -y cron bash && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -31,37 +31,24 @@ COPY package*.json ./
 COPY apps/web-crawler/package*.json ./apps/web-crawler/
 COPY packages ./packages/
 
-# Install only production dependencies
-RUN npm ci --workspace=apps/web-crawler --omit=dev
-
-# Copy built application from builder
+# Copy built application
 COPY --from=builder /app/apps/web-crawler/dist ./apps/web-crawler/dist
-COPY --from=builder /app/apps/web-crawler/crawl-configs ./apps/web-crawler/crawl-configs
-COPY --from=builder /app/apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-crawlers.sh
+COPY --from=builder /app/node_modules ./node_modules
 
-# Make script executable
-RUN chmod +x ./apps/web-crawler/run-concert-crawlers.sh
-
-# Create log directory
-RUN mkdir -p /var/log/crawler
-
-# Copy crontab file
+# Copy web-crawler specific files
+COPY apps/web-crawler/crawl-configs ./apps/web-crawler/crawl-configs
+COPY apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-crawlers.sh
 COPY apps/web-crawler/crontab.docker /etc/crontabs/root
 
-# Create non-root user for running crawlers
-RUN addgroup -g 1001 -S nodejs && \
-  adduser -S crawler -u 1001 -G nodejs && \
-  chown -R crawler:nodejs /app /var/log/crawler
+# Ensure cron.log exists and is writable
+RUN mkdir -p /var/log/crawler && touch /var/log/crawler/cron.log && chmod 644 /var/log/crawler/cron.log
 
-# Create startup script
-RUN echo '#!/bin/sh' > /start.sh && \
-  echo 'echo "Starting cron daemon..."' >> /start.sh && \
-  echo 'crond -f -l 2' >> /start.sh && \
-  chmod +x /start.sh
+# Give execution rights to the script
+RUN chmod +x /apps/web-crawler/run-concert-crawlers.sh
 
-# Healthcheck - check if cron is running
-HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-  CMD pgrep crond || exit 1
+# Set environment variables for cron
+ENV NODE_ENV=production
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/app/node_modules/.bin"
 
-CMD ["/start.sh"]
-
+# Run cron daemon
+CMD ["crond", "-f", "-l", "2"]
