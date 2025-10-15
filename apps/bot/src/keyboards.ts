@@ -1,5 +1,5 @@
 import { Markup } from 'telegraf';
-import type { EventItem } from './events-api.service.js';
+import type { EventItem } from './events-api.service';
 
 export function mainKeyboard() {
   return Markup.keyboard([

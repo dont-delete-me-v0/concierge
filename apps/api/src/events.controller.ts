@@ -8,7 +8,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { EventsService } from './events.service.js';
+import { EventsService } from './events.service';
 
 export interface EventDto {
   id: string; // hash

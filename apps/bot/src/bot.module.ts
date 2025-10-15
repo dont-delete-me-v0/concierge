@@ -2,12 +2,12 @@ import { Module } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { session } from 'telegraf';
-import { BotUpdate } from './bot.update.js';
-import { DatabaseService } from './database.service.js';
-import { DigestService } from './digest.service.js';
-import { EventsApiService } from './events-api.service.js';
-import { RedisSessionStore } from './redis-session.store.js';
-import { UserService } from './user.service.js';
+import { BotUpdate } from './bot.update';
+import { DatabaseService } from './database.service';
+import { DigestService } from './digest.service';
+import { EventsApiService } from './events-api.service';
+import { RedisSessionStore } from './redis-session.store';
+import { UserService } from './user.service';
 
 // Создаем Redis клиент
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {

@@ -5,26 +5,26 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import {
   parseDateRangeUaToUtcIso,
   parseDateTimeUaToUtcIso,
-} from './dateUtils.js';
+} from './dateUtils';
 import {
   computeRowHash,
   loadIncrementalState,
   saveIncrementalState,
-} from './incremental.js';
-import { parsePriceFrom } from './priceUtils.js';
-import { RabbitPublisher } from './rabbitmq.js';
-import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState.js';
-import { ConfigurableScraper } from './scraper.js';
+} from './incremental';
+import { parsePriceFrom } from './priceUtils';
+import { RabbitPublisher } from './rabbitmq';
+import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState';
+import { ConfigurableScraper } from './scraper';
 import {
   trackCriticalError,
   trackProgressEdit,
   trackProgressStart,
-} from './tracker.js';
+} from './tracker';
 import {
   validateConfig,
   type ExtractedRow,
   type ScraperConfig,
-} from './types.js';
+} from './types';
 
 async function readJsonConfig(filePath: string): Promise<unknown> {
   const abs = path.isAbsolute(filePath)
@@ -266,7 +266,7 @@ async function runOnce(
     const updatedRows: ExtractedRow[] = [];
     const itemsState: Record<
       string,
-      ExtractedRow & { changes?: import('./types.js').ChangeRecord[] }
+      ExtractedRow & { changes?: import('./types').ChangeRecord[] }
     > =
       trackChanges || updateExisting
         ? Object.create(null)
@@ -287,7 +287,7 @@ async function runOnce(
     }
 
     if (trackChanges || updateExisting) {
-      const { diffRows } = await import('./incremental.js');
+      const { diffRows } = await import('./incremental');
       for (const { hash, row } of updatedItems) {
         const prev = existingItems?.[hash];
         if (!prev) continue; // Should exist if hash known
@@ -594,7 +594,7 @@ process.on('uncaughtException', error => {
 });
 
 // Execute only when run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
   void main();
 }
 

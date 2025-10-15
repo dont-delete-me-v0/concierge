@@ -2,8 +2,8 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectBot } from 'nestjs-telegraf';
 import * as cron from 'node-cron';
 import { Telegraf } from 'telegraf';
-import { EventsApiService } from './events-api.service.js';
-import { UserService } from './user.service.js';
+import { EventsApiService } from './events-api.service';
+import { UserService } from './user.service';
 
 interface DigestStats {
   sent: number;

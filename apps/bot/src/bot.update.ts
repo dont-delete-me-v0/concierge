@@ -1,13 +1,13 @@
 import { Ctx, Hears, InjectBot, On, Start, Update } from 'nestjs-telegraf';
 import type { Context, Scenes } from 'telegraf';
 import { Markup } from 'telegraf';
-import { EventsApiService } from './events-api.service.js';
-import { formatEventCard, mainKeyboard, resolveEventUrl } from './keyboards.js';
-import { UserService } from './user.service.js';
+import { EventsApiService } from './events-api.service';
+import { formatEventCard, mainKeyboard, resolveEventUrl } from './keyboards';
+import { UserService } from './user.service';
 
 export interface SessionData {
   selectedCategories?: string[];
-  events?: import('./events-api.service.js').EventItem[];
+  events?: import('./events-api.service').EventItem[];
   currentIndex?: number;
   view?: 'card' | 'list';
   searchMode?: 'name' | 'price' | 'venue' | null;
@@ -38,10 +38,10 @@ export class BotUpdate {
    * Получить все события с пагинацией
    */
   private async getAllEventsWithPagination(searchParams: any): Promise<{
-    events: import('./events-api.service.js').EventItem[];
+    events: import('./events-api.service').EventItem[];
     total: number;
   }> {
-    const allEvents: import('./events-api.service.js').EventItem[] = [];
+    const allEvents: import('./events-api.service').EventItem[] = [];
     let offset = 0;
     const limit = 50;
     let totalCount = 0;
@@ -1462,7 +1462,7 @@ export class BotUpdate {
   }
 
   private async buildCardKeyboard(
-    e: import('./events-api.service.js').EventItem,
+    e: import('./events-api.service').EventItem,
     index: number,
     total: number,
     token?: string,

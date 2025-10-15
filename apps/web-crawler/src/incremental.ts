@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ChangeRecord, ExtractedRow, IncrementalState } from './types.js';
+import type { ChangeRecord, ExtractedRow, IncrementalState } from './types';
 
 export function buildKeyString(row: ExtractedRow, uniqueKey: string[]): string {
   const parts = uniqueKey.map(name => (row[name] ?? '').toString());

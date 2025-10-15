@@ -8,10 +8,10 @@ import {
 } from 'playwright';
 import { chromium } from 'playwright-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
-import { computeRowHash } from './incremental.js';
-import { PaginationHandler } from './pagination.js';
-import { ProxyManager, type ProxyConfig } from './proxyManager.js';
-import type { ExtractedRow, ScraperConfig, SelectorConfig } from './types.js';
+import { computeRowHash } from './incremental';
+import { PaginationHandler } from './pagination';
+import { ProxyManager, type ProxyConfig } from './proxyManager';
+import type { ExtractedRow, ScraperConfig, SelectorConfig } from './types';
 chromium.use(StealthPlugin());
 
 let userAgentSequentialIndex = 0;

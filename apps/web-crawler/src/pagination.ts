@@ -1,5 +1,5 @@
 import type { Page } from 'playwright';
-import type { BasePaginationConfig } from './types.js';
+import type { BasePaginationConfig } from './types';
 
 export class PaginationHandler {
   constructor(

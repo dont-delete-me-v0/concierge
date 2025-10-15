@@ -1,4 +1,4 @@
-import type { SelectorConfig, TransformType } from './types.js';
+import type { SelectorConfig, TransformType } from './types';
 
 function applyTransform(value: string, transform?: TransformType): string {
   if (transform === 'trim') return value.trim();
