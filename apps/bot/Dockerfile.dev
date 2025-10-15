@@ -1,0 +1,21 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY apps/bot/package*.json ./apps/bot/
+COPY packages ./packages/
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci --workspace=apps/bot
+
+# Copy config files
+COPY eslint.config.js .prettierrc.js ./
+
+# Copy source files will be mounted as volume
+
+EXPOSE 3001
+
+# Use nest CLI with watch mode for hot-reload
+CMD ["npm", "run", "start:dev", "--workspace=apps/bot"]

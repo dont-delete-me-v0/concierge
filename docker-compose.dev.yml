@@ -1,5 +1,5 @@
-# Docker Compose configuration for development
-# Only infrastructure services, apps run locally
+# Docker Compose configuration for development with hot-reload
+# All services run in Docker with source code mounted as volumes
 # Usage: docker-compose -f docker-compose.dev.yml up -d
 
 services:
@@ -70,10 +70,136 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    container_name: concierge-api-dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-concierge}
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-events}
+      RABBITMQ_PREFETCH: ${RABBITMQ_PREFETCH:-100}
+      CONSUMER_BATCH_SIZE: ${CONSUMER_BATCH_SIZE:-100}
+      CONSUMER_FLUSH_MS: ${CONSUMER_FLUSH_MS:-200}
+      TELEGRAM_TRACKER_TOKEN: ${TELEGRAM_TRACKER_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      # Mount source code for hot-reload
+      - ./apps/api/src:/app/apps/api/src:ro
+      - ./apps/api/nest-cli.json:/app/apps/api/nest-cli.json:ro
+      - ./apps/api/tsconfig.json:/app/apps/api/tsconfig.json:ro
+      - ./apps/api/tsconfig.build.json:/app/apps/api/tsconfig.build.json:ro
+      # Prevent overwriting node_modules
+      - /app/node_modules
+      - /app/apps/api/node_modules
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile.dev
+    container_name: concierge-bot-dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3001
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-concierge}
+      REDIS_URL: redis://redis:6379
+      API_BASE_URL: http://api:3000
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      DIGEST_CRON: ${DIGEST_CRON:-0 8 * * *}
+    ports:
+      - "${BOT_PORT:-3001}:3001"
+    volumes:
+      # Mount source code for hot-reload
+      - ./apps/bot/src:/app/apps/bot/src:ro
+      - ./apps/bot/nest-cli.json:/app/apps/bot/nest-cli.json:ro
+      - ./apps/bot/tsconfig.json:/app/apps/bot/tsconfig.json:ro
+      - ./apps/bot/tsconfig.build.json:/app/apps/bot/tsconfig.build.json:ro
+      # Prevent overwriting node_modules
+      - /app/node_modules
+      - /app/apps/bot/node_modules
+
+  web-crawler:
+    build:
+      context: .
+      dockerfile: apps/web-crawler/Dockerfile.dev
+    container_name: concierge-web-crawler-dev
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
+      RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-events}
+      PUBLISHER_BATCH_SIZE: ${PUBLISHER_BATCH_SIZE:-50}
+      PUBLISHER_BATCH_INTERVAL_MS: ${PUBLISHER_BATCH_INTERVAL_MS:-200}
+      PUBLISHER_MAX_RETRIES: ${PUBLISHER_MAX_RETRIES:-3}
+      PUBLISHER_RECONNECT_DELAY_MS: ${PUBLISHER_RECONNECT_DELAY_MS:-1000}
+      STATE_PREFIX: ${STATE_PREFIX:-concert.ua}
+      CRAWLER_SAVE_OUTPUT: ${CRAWLER_SAVE_OUTPUT:-true}
+      TELEGRAM_TRACKING: ${TELEGRAM_TRACKING:-false}
+      TELEGRAM_TRACKER_TOKEN: ${TELEGRAM_TRACKER_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      API_BASE_URL: http://api:3000
+      SOURCE_BASE_URL: ${SOURCE_BASE_URL:-https://concert.ua}
+    volumes:
+      # Mount source code for hot-reload
+      - ./apps/web-crawler/src:/app/apps/web-crawler/src:ro
+      - ./apps/web-crawler/crawl-configs:/app/apps/web-crawler/crawl-configs:ro
+      - ./apps/web-crawler/tsconfig.json:/app/apps/web-crawler/tsconfig.json:ro
+      # Logs
+      - crawler_logs_dev:/var/log/crawler
+      # Prevent overwriting node_modules
+      - /app/node_modules
+      - /app/apps/web-crawler/node_modules
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep tail || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 volumes:
   postgres_data_dev:
   pgadmin_data_dev:
   rabbitmq_data_dev:
+  crawler_logs_dev:
 
 networks:
   default:

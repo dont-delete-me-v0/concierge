@@ -1,0 +1,24 @@
+FROM node:18-alpine
+
+# Install wget for healthcheck
+RUN apk add --no-cache wget
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY apps/api/package*.json ./apps/api/
+COPY packages ./packages/
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci --workspace=apps/api
+
+# Copy config files
+COPY eslint.config.js .prettierrc.js ./
+
+# Copy source files will be mounted as volume
+
+EXPOSE 3000
+
+# Use nest CLI with watch mode for hot-reload
+CMD ["npm", "run", "start:dev", "--workspace=apps/api"]

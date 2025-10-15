@@ -1,15 +1,36 @@
 .PHONY: start-dev backup backup-manual restore list-backups db-backup-logs \
 	docker-build docker-up docker-down docker-restart docker-logs docker-ps \
+	docker-dev-build docker-dev-up docker-dev-down docker-dev-restart docker-dev-logs \
 	dev-infra dev-infra-down dev-api dev-bot dev-crawler \
 	crawler-logs crawler-health
 
 start-dev:
 	cd apps/web-crawler && npm run dev
 
-# Development commands (only infrastructure in Docker)
+# Docker development commands (all services in Docker with hot-reload)
+docker-dev-build:
+	@echo "Building Docker development images..."
+	@docker-compose -f docker-compose.dev.yml build
+
+docker-dev-up:
+	@echo "Starting all services in development mode..."
+	@docker-compose -f docker-compose.dev.yml up -d
+
+docker-dev-down:
+	@echo "Stopping all development services..."
+	@docker-compose -f docker-compose.dev.yml down
+
+docker-dev-restart:
+	@echo "Restarting all development services..."
+	@docker-compose -f docker-compose.dev.yml restart
+
+docker-dev-logs:
+	@docker-compose -f docker-compose.dev.yml logs -f
+
+# Development commands (only infrastructure in Docker, apps run locally)
 dev-infra:
 	@echo "Starting development infrastructure (DB, Redis, RabbitMQ)..."
-	@docker-compose -f docker-compose.dev.yml up -d
+	@docker-compose -f docker-compose.dev.yml up -d db redis rabbitmq pgadmin
 
 dev-infra-down:
 	@echo "Stopping development infrastructure..."
