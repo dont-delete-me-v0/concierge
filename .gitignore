@@ -15,3 +15,5 @@ coverage/
 packages/database/backups/
 *.sql
 *.sql.gz
+
+/generated/prisma

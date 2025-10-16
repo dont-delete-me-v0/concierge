@@ -49,5 +49,6 @@ COPY eslint.config.js .prettierrc.js ./
 ENV NODE_ENV=development
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/app/node_modules/.bin"
 
-# Keep container running (scheduler will run with tsx for hot-reload)
-CMD ["tail", "-f", "/dev/null"]
+# Run scheduler in dev mode with hot-reload
+WORKDIR /app/apps/web-crawler
+CMD ["npm", "run", "scheduler"]

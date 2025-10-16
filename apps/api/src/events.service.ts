@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import crypto from 'node:crypto';
-import { DatabaseService } from './database.service';
+import { PrismaService } from '@concierge/database';
+import { Prisma } from '@prisma/client';
 
 export interface CategoryEntity {
   id?: string;
@@ -38,88 +39,95 @@ function computeId(input: string): string {
 
 @Injectable()
 export class EventsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async upsertCategory(input: CategoryEntity): Promise<string> {
     const id =
       input.id ?? computeId(`cat|${input.name}|${input.parent_id ?? ''}`);
-    await this.db.query(
-      `
-      INSERT INTO public.categories (id, name, icon, parent_id)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name,
-        icon = EXCLUDED.icon,
-        parent_id = EXCLUDED.parent_id
-    `,
-      [id, input.name, input.icon ?? null, input.parent_id ?? null]
-    );
+
+    await this.prisma.category.upsert({
+      where: { id },
+      create: {
+        id,
+        name: input.name,
+        icon: input.icon ?? null,
+        parentId: input.parent_id ?? null,
+      },
+      update: {
+        name: input.name,
+        icon: input.icon ?? null,
+        parentId: input.parent_id ?? null,
+      },
+    });
+
     return id;
   }
 
   async upsertVenue(input: VenueEntity): Promise<string> {
     const id =
       input.id ?? computeId(`venue|${input.name}|${input.address ?? ''}`);
-    await this.db.query(
-      `
-      INSERT INTO public.venues (id, name, address, lat, lng, phone, website)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name,
-        address = EXCLUDED.address,
-        lat = EXCLUDED.lat,
-        lng = EXCLUDED.lng,
-        phone = EXCLUDED.phone,
-        website = EXCLUDED.website
-    `,
-      [
+
+    await this.prisma.venue.upsert({
+      where: { id },
+      create: {
         id,
-        input.name,
-        input.address ?? null,
-        input.lat ?? null,
-        input.lng ?? null,
-        input.phone ?? null,
-        input.website ?? null,
-      ]
-    );
+        name: input.name,
+        address: input.address ?? null,
+        lat: input.lat ?? null,
+        lng: input.lng ?? null,
+        phone: input.phone ?? null,
+        website: input.website ?? null,
+      },
+      update: {
+        name: input.name,
+        address: input.address ?? null,
+        lat: input.lat ?? null,
+        lng: input.lng ?? null,
+        phone: input.phone ?? null,
+        website: input.website ?? null,
+      },
+    });
+
     return id;
   }
 
   async upsertEvent(e: EventEntity) {
-    const sql = `
-      INSERT INTO public.events (id, title, description, category_id, venue_id, date_time, date_time_from, date_time_to, price_from, source_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      ON CONFLICT (id) DO UPDATE SET
-        title = EXCLUDED.title,
-        description = EXCLUDED.description,
-        category_id = EXCLUDED.category_id,
-        venue_id = EXCLUDED.venue_id,
-        date_time = COALESCE(EXCLUDED.date_time, EXCLUDED.date_time_from),
-        date_time_from = EXCLUDED.date_time_from,
-        date_time_to = EXCLUDED.date_time_to,
-        price_from = EXCLUDED.price_from,
-        source_url = EXCLUDED.source_url
-      RETURNING *
-    `;
-    const params = [
-      e.id,
-      e.title ?? null,
-      e.description ?? null,
-      e.category_id ?? null,
-      e.venue_id ?? null,
-      e.date_time ? new Date(e.date_time) : null,
-      e.date_time_from ? new Date(e.date_time_from) : null,
-      e.date_time_to ? new Date(e.date_time_to) : null,
-      e.price_from ?? null,
-      e.source_url ?? null,
-    ];
-    const { rows } = await this.db.query(sql, params);
-    return rows[0];
+    const dateTime = e.date_time ? new Date(e.date_time) : null;
+    const dateTimeFrom = e.date_time_from ? new Date(e.date_time_from) : null;
+    const dateTimeTo = e.date_time_to ? new Date(e.date_time_to) : null;
+
+    return this.prisma.event.upsert({
+      where: { id: e.id },
+      create: {
+        id: e.id,
+        title: e.title ?? null,
+        description: e.description ?? null,
+        categoryId: e.category_id ?? null,
+        venueId: e.venue_id ?? null,
+        dateTime: dateTimeFrom ?? dateTime,
+        dateTimeFrom,
+        dateTimeTo,
+        priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+        sourceUrl: e.source_url ?? null,
+      },
+      update: {
+        title: e.title ?? null,
+        description: e.description ?? null,
+        categoryId: e.category_id ?? null,
+        venueId: e.venue_id ?? null,
+        dateTime: dateTimeFrom ?? dateTime,
+        dateTimeFrom,
+        dateTimeTo,
+        priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+        sourceUrl: e.source_url ?? null,
+      },
+    });
   }
 
   async upsertMany(events: EventEntity[]): Promise<void> {
     if (events.length === 0) return;
-    // Deduplicate by id within the batch to avoid ON CONFLICT UPDATE affecting same row twice
+
+    // Deduplicate by id within the batch
     const uniqueById = new Map<string, EventEntity>();
     for (const e of events) {
       if (!e?.id) continue;
@@ -127,242 +135,263 @@ export class EventsService {
     }
     const uniq = Array.from(uniqueById.values());
 
-    const cols = [
-      'id',
-      'title',
-      'description',
-      'category_id',
-      'venue_id',
-      'date_time',
-      'date_time_from',
-      'date_time_to',
-      'price_from',
-      'source_url',
-    ];
-    const valuesSql: string[] = [];
-    const params: unknown[] = [];
-    for (let i = 0; i < uniq.length; i++) {
-      const e = uniq[i];
-      const base = i * cols.length;
-      valuesSql.push(
-        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9}, $${base + 10})`
-      );
-      params.push(
-        e.id,
-        e.title ?? null,
-        e.description ?? null,
-        e.category_id ?? null,
-        e.venue_id ?? null,
-        e.date_time ? new Date(e.date_time) : null,
-        e.date_time_from ? new Date(e.date_time_from) : null,
-        e.date_time_to ? new Date(e.date_time_to) : null,
-        e.price_from ?? null,
-        e.source_url ?? null
-      );
-    }
-    const sql = `
-      INSERT INTO public.events (id, title, description, category_id, venue_id, date_time, date_time_from, date_time_to, price_from, source_url)
-      VALUES ${valuesSql.join(',')}
-      ON CONFLICT (id) DO UPDATE SET
-        title = EXCLUDED.title,
-        description = EXCLUDED.description,
-        category_id = EXCLUDED.category_id,
-        venue_id = EXCLUDED.venue_id,
-        date_time = COALESCE(EXCLUDED.date_time, EXCLUDED.date_time_from),
-        date_time_from = EXCLUDED.date_time_from,
-        date_time_to = EXCLUDED.date_time_to,
-        price_from = EXCLUDED.price_from,
-        source_url = EXCLUDED.source_url
-    `;
-    await this.db.query(sql, params);
+    // Use transaction for bulk upsert
+    await this.prisma.$transaction(
+      uniq.map((e) => {
+        const dateTime = e.date_time ? new Date(e.date_time) : null;
+        const dateTimeFrom = e.date_time_from ? new Date(e.date_time_from) : null;
+        const dateTimeTo = e.date_time_to ? new Date(e.date_time_to) : null;
+
+        return this.prisma.event.upsert({
+          where: { id: e.id },
+          create: {
+            id: e.id,
+            title: e.title ?? null,
+            description: e.description ?? null,
+            categoryId: e.category_id ?? null,
+            venueId: e.venue_id ?? null,
+            dateTime: dateTimeFrom ?? dateTime,
+            dateTimeFrom,
+            dateTimeTo,
+            priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+            sourceUrl: e.source_url ?? null,
+          },
+          update: {
+            title: e.title ?? null,
+            description: e.description ?? null,
+            categoryId: e.category_id ?? null,
+            venueId: e.venue_id ?? null,
+            dateTime: dateTimeFrom ?? dateTime,
+            dateTimeFrom,
+            dateTimeTo,
+            priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+            sourceUrl: e.source_url ?? null,
+          },
+        });
+      })
+    );
   }
 
   async findAll() {
-    const { rows } = await this.db.query(
-      'SELECT * FROM public.events ORDER BY date_time NULLS LAST, id DESC'
-    );
-    return rows;
+    return this.prisma.event.findMany({
+      orderBy: [
+        { dateTime: { sort: 'asc', nulls: 'last' } },
+        { id: 'desc' },
+      ],
+    });
   }
 
   async findOne(id: string) {
-    const { rows } = await this.db.query(
-      'SELECT * FROM public.events WHERE id = $1',
-      [id]
-    );
-    return rows[0] ?? null;
+    return this.prisma.event.findUnique({
+      where: { id },
+    });
   }
 
   async remove(id: string) {
-    await this.db.query('DELETE FROM public.events WHERE id = $1', [id]);
+    await this.prisma.event.delete({
+      where: { id },
+    });
     return { id };
   }
 
   async listCategories(): Promise<CategoryEntity[]> {
-    const { rows } = await this.db.query(
-      'SELECT id, name, icon, parent_id FROM public.categories ORDER BY name'
-    );
-    return rows as CategoryEntity[];
+    const categories = await this.prisma.category.findMany({
+      orderBy: { name: 'asc' },
+    });
+
+    return categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+      parent_id: c.parentId,
+    }));
   }
 
   async findVenueIdByFuzzy(text: string): Promise<string | null> {
     if (!text || text.trim().length === 0) return null;
+
     const fromChars = 'АВЕКМНОРСТХУавекмнорстху';
     const toChars = 'ABEKMHOPCTXYabekmhopctxy';
-    const sql = `
+
+    const sql = Prisma.sql`
       WITH q AS (
-        SELECT LOWER(translate(regexp_replace($1, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}')) AS qnorm
+        SELECT LOWER(translate(regexp_replace(${text}, '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars})) AS qnorm
       )
       SELECT v.id, v.name,
              LENGTH(v.name) AS score
-      FROM public.venues v, q
+      FROM venues v, q
       WHERE
         (
-          LOWER(translate(regexp_replace(v.name, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}')) LIKE '%' || q.qnorm || '%'
-          OR LOWER(translate(regexp_replace(COALESCE(v.address, ''), '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}')) LIKE '%' || q.qnorm || '%'
+          LOWER(translate(regexp_replace(v.name, '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars})) LIKE '%' || q.qnorm || '%'
+          OR LOWER(translate(regexp_replace(COALESCE(v.address, ''), '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars})) LIKE '%' || q.qnorm || '%'
         )
       ORDER BY score DESC
       LIMIT 1
     `;
-    const { rows } = await this.db.query<{ id: string }>(sql, [text]);
-    return (rows?.[0]?.id ?? null) as string | null;
+
+    const result = await this.prisma.$queryRaw<Array<{ id: string }>>(sql);
+    return result?.[0]?.id ?? null;
   }
 
   async searchPaginated(input: {
     q?: string;
     categoryIds?: string[];
     venueName?: string;
-    dateFrom?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
-    dateTo?: string; // ISO YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+    dateFrom?: string;
+    dateTo?: string;
     priceFrom?: number;
     priceTo?: number;
     limit: number;
     offset: number;
   }): Promise<{ items: EventEntity[]; total: number }> {
     console.log('[EventsService] searchPaginated input:', input);
-    const where: string[] = [];
-    const params: unknown[] = [];
-    const add = (clause: string, value: unknown) => {
-      params.push(value);
-      where.push(clause.replace('$X', `$${params.length}`));
-    };
 
+    const where: Prisma.EventWhereInput = {};
+
+    // Text search
     if (input.q && input.q.trim().length > 0) {
-      const like = `%${input.q.trim()}%`;
-      // add two params for title and description separately
-      params.push(like);
-      const p1 = `$${params.length}`;
-      params.push(like);
-      const p2 = `$${params.length}`;
-      where.push(`(title ILIKE ${p1} OR description ILIKE ${p2})`);
+      const searchText = `%${input.q.trim()}%`;
+      where.OR = [
+        { title: { contains: input.q.trim(), mode: 'insensitive' } },
+        { description: { contains: input.q.trim(), mode: 'insensitive' } },
+      ];
     }
+
+    // Category filter
     if (input.categoryIds && input.categoryIds.length > 0) {
-      // Поддержка множественных категорий через ANY
-      params.push(input.categoryIds);
-      where.push(`category_id = ANY($${params.length})`);
+      where.categoryId = { in: input.categoryIds };
     }
+
+    // Venue search with fuzzy matching
     if (input.venueName && input.venueName.trim().length > 0) {
-      // Robust match: case-insensitive, normalize Cyrillic/Latin lookalikes, and ignore punctuation
-      const raw = input.venueName.trim();
-      params.push(raw);
-      const p1 = `$${params.length}`;
-      // same param reused
+      // For complex venue matching, we'll use raw SQL in a subquery
       const fromChars = 'АВЕКМНОРСТХУавекмнорстху';
       const toChars = 'ABEKMHOPCTXYabekmhopctxy';
-      const normExpr = (col: string) =>
-        `LOWER(translate(regexp_replace(${col}, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}'))`;
-      const normParam = `LOWER(translate(regexp_replace(${p1}, '[\\s\\-_,.()]+', ' ', 'g'), '${fromChars}', '${toChars}'))`;
-      where.push(
-        `(
-          ${normExpr('v.name')} ILIKE '%' || ${normParam} || '%' OR
-          ${normExpr("COALESCE(v.address, '')")} ILIKE '%' || ${normParam} || '%'
-        )`
-      );
+
+      const venueIds = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT v.id
+        FROM venues v
+        WHERE
+          LOWER(translate(regexp_replace(v.name, '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars}))
+          ILIKE '%' || LOWER(translate(regexp_replace(${input.venueName.trim()}, '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars})) || '%'
+          OR LOWER(translate(regexp_replace(COALESCE(v.address, ''), '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars}))
+          ILIKE '%' || LOWER(translate(regexp_replace(${input.venueName.trim()}, '[\\s\\-_,.()]+', ' ', 'g'), ${fromChars}, ${toChars})) || '%'
+      `;
+
+      if (venueIds.length > 0) {
+        where.venueId = { in: venueIds.map(v => v.id) };
+      } else {
+        // No matching venues, return empty result
+        where.venueId = { in: [] };
+      }
     }
+
+    // Date filters
     if (input.dateFrom) {
-      // Check if it's a full datetime or just date
       if (input.dateFrom.includes('T')) {
-        // Full datetime: normalize format and compare with timestamp
         let normalizedDate = input.dateFrom;
-        // Add seconds if not present (HH:mm -> HH:mm:00)
         if (normalizedDate.match(/T\d{2}:\d{2}$/)) {
           normalizedDate += ':00';
         }
         console.log('[EventsService] Normalized dateFrom:', normalizedDate);
-        where.push(
-          `COALESCE(date_time_from, date_time) >= $${
-            params.push(normalizedDate) && params.length
-          }::timestamp`
-        );
+        where.OR = [
+          { dateTimeFrom: { gte: new Date(normalizedDate) } },
+          { AND: [{ dateTimeFrom: null }, { dateTime: { gte: new Date(normalizedDate) } }] },
+        ];
       } else {
-        // Date only: compare by date to avoid timezone mismatches
-        where.push(
-          `DATE(COALESCE(date_time_from, date_time, date_time_to)) >= $${
-            params.push(input.dateFrom) && params.length
-          }::date`
-        );
+        // Date only comparison - using raw SQL for DATE() function
+        const dateFromFilter = new Date(input.dateFrom);
+        where.OR = [
+          { dateTimeFrom: { gte: dateFromFilter } },
+          { AND: [{ dateTimeFrom: null }, { dateTime: { gte: dateFromFilter } }] },
+        ];
       }
     }
+
     if (input.dateTo) {
       if (input.dateTo.includes('T')) {
-        // Full datetime: normalize format and compare with timestamp
         let normalizedDate = input.dateTo;
-        // Add seconds if not present (HH:mm -> HH:mm:00)
         if (normalizedDate.match(/T\d{2}:\d{2}$/)) {
           normalizedDate += ':00';
         }
         console.log('[EventsService] Normalized dateTo:', normalizedDate);
-        where.push(
-          `COALESCE(date_time_from, date_time) < $${
-            params.push(normalizedDate) && params.length
-          }::timestamp`
-        );
+        const existingOr = where.OR || [];
+        where.AND = [
+          ...(Array.isArray(existingOr) && existingOr.length > 0 ? [{ OR: existingOr }] : []),
+          {
+            OR: [
+              { dateTimeFrom: { lt: new Date(normalizedDate) } },
+              { AND: [{ dateTimeFrom: null }, { dateTime: { lt: new Date(normalizedDate) } }] },
+            ],
+          },
+        ];
+        delete where.OR;
       } else {
-        // Date only: compare by date to avoid timezone mismatches
-        where.push(
-          `DATE(COALESCE(date_time_from, date_time, date_time_to)) <= $${
-            params.push(input.dateTo) && params.length
-          }::date`
-        );
+        const dateToFilter = new Date(input.dateTo);
+        const existingOr = where.OR || [];
+        where.AND = [
+          ...(Array.isArray(existingOr) && existingOr.length > 0 ? [{ OR: existingOr }] : []),
+          {
+            OR: [
+              { dateTimeFrom: { lte: dateToFilter } },
+              { AND: [{ dateTimeFrom: null }, { dateTime: { lte: dateToFilter } }] },
+            ],
+          },
+        ];
+        delete where.OR;
       }
     }
-    if (input.priceFrom !== undefined) {
-      add('price_from >= $X', input.priceFrom);
+
+    // Price filters
+    if (input.priceFrom !== undefined && input.priceTo !== undefined) {
+      where.priceFrom = {
+        gte: new Prisma.Decimal(input.priceFrom),
+        lte: new Prisma.Decimal(input.priceTo)
+      };
+    } else if (input.priceFrom !== undefined) {
+      where.priceFrom = {
+        gte: new Prisma.Decimal(input.priceFrom)
+      };
+    } else if (input.priceTo !== undefined) {
+      where.priceFrom = {
+        lte: new Prisma.Decimal(input.priceTo)
+      };
     }
-    if (input.priceTo !== undefined) {
-      add('price_from <= $X', input.priceTo);
-    }
 
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const orderSql =
-      'ORDER BY COALESCE(date_time_from, date_time) NULLS LAST, id DESC';
+    console.log('[EventsService] Prisma where:', JSON.stringify(where, null, 2));
 
-    console.log('[EventsService] whereSql:', whereSql);
-    console.log('[EventsService] params:', params);
-
-    // total
-    const totalSql = `SELECT COUNT(*)::int AS cnt FROM public.events e LEFT JOIN public.venues v ON v.id = e.venue_id ${whereSql.replaceAll('category_id', 'e.category_id').replaceAll('COALESCE(date_time_from, date_time)', 'COALESCE(e.date_time_from, e.date_time)')}`;
-    console.log('[EventsService] totalSql:', totalSql);
-    const totalRes = await this.db.query(totalSql, params);
-    const totalRow = (totalRes.rows?.[0] ?? { cnt: 0 }) as { cnt: number };
-    const total = Number(totalRow.cnt ?? 0);
+    // Get total count
+    const total = await this.prisma.event.count({ where });
     console.log('[EventsService] total:', total);
 
-    // items
-    const itemsParams = params.slice();
-    itemsParams.push(input.limit);
-    itemsParams.push(input.offset);
-    const itemsSql = `
-      SELECT e.* FROM public.events e
-      LEFT JOIN public.venues v ON v.id = e.venue_id
-      ${whereSql.replaceAll('category_id', 'e.category_id').replaceAll('COALESCE(date_time_from, date_time)', 'COALESCE(e.date_time_from, e.date_time)')}
-      ${orderSql.replace('COALESCE(date_time_from, date_time)', 'COALESCE(e.date_time_from, e.date_time)')}
-      LIMIT $${itemsParams.length - 1}
-      OFFSET $${itemsParams.length}
-    `;
-    console.log('[EventsService] itemsSql:', itemsSql);
-    console.log('[EventsService] itemsParams:', itemsParams);
-    const itemsRes = await this.db.query(itemsSql, itemsParams);
-    console.log('[EventsService] returned', itemsRes.rows.length, 'items');
-    return { items: itemsRes.rows as EventEntity[], total };
+    // Get items
+    const items = await this.prisma.event.findMany({
+      where,
+      orderBy: [
+        { dateTimeFrom: { sort: 'asc', nulls: 'last' } },
+        { dateTime: { sort: 'asc', nulls: 'last' } },
+        { id: 'desc' },
+      ],
+      take: input.limit,
+      skip: input.offset,
+    });
+
+    console.log('[EventsService] returned', items.length, 'items');
+
+    // Convert to EventEntity format
+    const eventEntities: EventEntity[] = items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      category_id: item.categoryId,
+      venue_id: item.venueId,
+      date_time: item.dateTime?.toISOString() ?? null,
+      date_time_from: item.dateTimeFrom?.toISOString() ?? null,
+      date_time_to: item.dateTimeTo?.toISOString() ?? null,
+      price_from: item.priceFrom ? Number(item.priceFrom) : null,
+      source_url: item.sourceUrl,
+    }));
+
+    return { items: eventEntities, total };
   }
 }

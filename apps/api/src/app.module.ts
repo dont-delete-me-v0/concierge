@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { DatabaseService } from './database.service';
+import { PrismaService } from '@concierge/database';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { RabbitConsumer } from './rabbitmq.consumer';
@@ -13,7 +13,7 @@ import { TelegramService } from './telegram.service';
   controllers: [AppController, EventsController, TelegramController],
   providers: [
     AppService,
-    DatabaseService,
+    PrismaService,
     EventsService,
     RabbitConsumer,
     TelegramService,

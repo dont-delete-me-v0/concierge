@@ -3,7 +3,7 @@ import { Redis } from 'ioredis';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { session } from 'telegraf';
 import { BotUpdate } from './bot.update';
-import { DatabaseService } from './database.service';
+import { PrismaService } from '@concierge/database';
 import { DigestService } from './digest.service';
 import { EventsApiService } from './events-api.service';
 import { RedisSessionStore } from './redis-session.store';
@@ -59,7 +59,7 @@ const sessionStore = new RedisSessionStore(redis, {
   providers: [
     BotUpdate,
     EventsApiService,
-    DatabaseService,
+    PrismaService,
     UserService,
     DigestService,
   ],

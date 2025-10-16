@@ -8,10 +8,18 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY apps/api/package*.json ./apps/api/
-COPY packages ./packages/
+
+# Copy Prisma schema
+COPY prisma ./prisma
+
+# Copy packages (needed for @concierge/database)
+COPY packages/database ./packages/database
 
 # Install all dependencies (including dev dependencies)
 RUN npm ci --workspace=apps/api
+
+# Generate Prisma client
+RUN npx prisma generate
 
 # Copy config files
 COPY eslint.config.js .prettierrc.js ./
