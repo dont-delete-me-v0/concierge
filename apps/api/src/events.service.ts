@@ -172,19 +172,49 @@ export class EventsService {
     );
   }
 
-  async findAll() {
-    return this.prisma.event.findMany({
+  async findAll(): Promise<EventEntity[]> {
+    const items = await this.prisma.event.findMany({
       orderBy: [
         { dateTime: { sort: 'asc', nulls: 'last' } },
         { id: 'desc' },
       ],
     });
+
+    // Convert to EventEntity format with snake_case fields
+    return items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      category_id: item.categoryId,
+      venue_id: item.venueId,
+      date_time: item.dateTime?.toISOString() ?? null,
+      date_time_from: item.dateTimeFrom?.toISOString() ?? null,
+      date_time_to: item.dateTimeTo?.toISOString() ?? null,
+      price_from: item.priceFrom ? Number(item.priceFrom) : null,
+      source_url: item.sourceUrl,
+    }));
   }
 
-  async findOne(id: string) {
-    return this.prisma.event.findUnique({
+  async findOne(id: string): Promise<EventEntity | null> {
+    const item = await this.prisma.event.findUnique({
       where: { id },
     });
+
+    if (!item) return null;
+
+    // Convert to EventEntity format with snake_case fields
+    return {
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      category_id: item.categoryId,
+      venue_id: item.venueId,
+      date_time: item.dateTime?.toISOString() ?? null,
+      date_time_from: item.dateTimeFrom?.toISOString() ?? null,
+      date_time_to: item.dateTimeTo?.toISOString() ?? null,
+      price_from: item.priceFrom ? Number(item.priceFrom) : null,
+      source_url: item.sourceUrl,
+    };
   }
 
   async remove(id: string) {
