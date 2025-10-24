@@ -41,7 +41,28 @@ export class EventsApiService {
 
   constructor() {
     const baseURL = process.env.API_BASE_URL ?? 'http://localhost:3000';
-    this.http = axios.create({ baseURL });
+    this.http = axios.create({
+      baseURL,
+      paramsSerializer: {
+        serialize: (params) => {
+          // Custom serialization to handle arrays properly for NestJS
+          const parts: string[] = [];
+          for (const [key, value] of Object.entries(params)) {
+            if (value === undefined || value === null) continue;
+
+            if (Array.isArray(value)) {
+              // For arrays, repeat the parameter: categoryId=val1&categoryId=val2
+              value.forEach((v) => {
+                parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`);
+              });
+            } else {
+              parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+            }
+          }
+          return parts.join('&');
+        },
+      },
+    });
   }
 
   async all(): Promise<EventItem[]> {

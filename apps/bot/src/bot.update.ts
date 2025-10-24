@@ -348,6 +348,8 @@ export class BotUpdate {
     // Получаем предпочтения пользователя
     const preferences = await this.userService.getUserPreferences(telegramId);
 
+    console.log('[BotUpdate] Recommendations - preferences:', JSON.stringify(preferences, null, 2));
+
     if (
       !preferences ||
       (!preferences.category_ids?.length &&
@@ -379,6 +381,7 @@ export class BotUpdate {
     if (preferences.category_ids?.length) {
       // Передаем все категории из предпочтений
       searchParams.categoryId = preferences.category_ids;
+      console.log('[BotUpdate] Recommendations - setting categoryId:', preferences.category_ids);
     }
 
     if (preferences.price_min) {
@@ -389,9 +392,13 @@ export class BotUpdate {
       searchParams.priceTo = preferences.price_max;
     }
 
+    console.log('[BotUpdate] Recommendations - final searchParams:', JSON.stringify(searchParams, null, 2));
+
     // Получаем все события с пагинацией
     const { events, total } =
       await this.getAllEventsWithPagination(searchParams);
+
+    console.log('[BotUpdate] Recommendations - received events:', events.length, 'total:', total);
 
     if (!events.length) {
       await ctx.reply(
