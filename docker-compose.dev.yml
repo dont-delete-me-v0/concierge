@@ -11,6 +11,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-concierge}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -164,6 +165,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      api:
+        condition: service_healthy
     environment:
       NODE_ENV: development
       REDIS_URL: redis://redis:6379
@@ -175,7 +178,7 @@ services:
       PUBLISHER_RECONNECT_DELAY_MS: ${PUBLISHER_RECONNECT_DELAY_MS:-1000}
       STATE_PREFIX: ${STATE_PREFIX:-concert.ua}
       CRAWLER_SAVE_OUTPUT: ${CRAWLER_SAVE_OUTPUT:-true}
-      TELEGRAM_TRACKING: ${TELEGRAM_TRACKING:-false}
+      TELEGRAM_TRACKING: ${TELEGRAM_TRACKING:-true}
       TELEGRAM_TRACKER_TOKEN: ${TELEGRAM_TRACKER_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
       API_BASE_URL: http://api:3000

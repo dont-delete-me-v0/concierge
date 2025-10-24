@@ -513,7 +513,12 @@ async function main(): Promise<void> {
       }
       const cfg = validated.config;
       const retries = cfg.retries ?? 0;
-      const configName = path.basename(configPath);
+      // Use directory structure for better identification: kyiv/humor/config.json -> kyiv-humor
+      const relativePath = path.relative(process.cwd(), configPath);
+      const parts = relativePath.split(path.sep);
+      const configName = parts.length >= 3
+        ? parts.slice(-3, -1).join('-') // e.g., "kyiv-humor"
+        : path.basename(configPath); // fallback to filename
       const scraper = new ConfigurableScraper(cfg);
 
       for (let attempt = 0; attempt <= retries; attempt++) {

@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 type TrackKind =
   | 'critical_error'
   | 'parsing_progress'
@@ -107,26 +109,20 @@ async function postTrack(payload: {
   console.log(`[Tracker] ${payload.kind}: ${message}`);
 
   try {
-    const res = await fetch(`${apiBase()}/telegram/track`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const res = await axios.post(
+      `${apiBase()}/telegram/track`,
+      {
         kind: payload.kind,
         text: message,
         messageId: payload.messageId,
-      }),
-    });
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000, // 10 second timeout
+      }
+    );
 
-    if (!res.ok) {
-      const errorText = await res.text().catch(() => 'Unknown error');
-      console.warn(
-        `[Tracker] Failed to send notification (HTTP ${res.status}):`,
-        errorText
-      );
-      return { ok: false, error: errorText };
-    }
-
-    const data = (await res.json()) as TrackResponse;
+    const data = res.data as TrackResponse;
 
     if (!data.ok) {
       console.warn(
@@ -139,21 +135,27 @@ async function postTrack(payload: {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
-    // Более информативное сообщение об ошибке
-    if (errorMessage.includes('ECONNREFUSED')) {
-      console.warn(
-        '[Tracker] Cannot connect to API server. Make sure API is running at:',
-        apiBase()
-      );
-      console.warn(
-        '[Tracker] To disable Telegram tracking: TELEGRAM_TRACKING=false'
-      );
-    } else if (errorMessage.includes('fetch')) {
-      console.warn('[Tracker] Network error:', errorMessage);
+    // Check if it's an axios error with response
+    if (axios.isAxiosError(err)) {
+      if (err.response) {
+        console.warn(
+          `[Tracker] API returned error (HTTP ${err.response.status}):`,
+          err.response.data
+        );
+        return { ok: false, error: err.response.data };
+      } else if (err.code === 'ECONNREFUSED') {
+        console.warn('[Tracker] Cannot connect to API server at:', apiBase());
+        console.warn('[Tracker] Make sure API is running');
+      } else if (err.code === 'ETIMEDOUT') {
+        console.warn('[Tracker] Request timeout - API is not responding');
+      } else {
+        console.warn('[Tracker] Network error:', errorMessage);
+      }
     } else {
-      console.warn('[Tracker] Error sending notification:', errorMessage);
+      console.warn('[Tracker] Unexpected error:', errorMessage);
     }
 
+    console.warn('[Tracker] To disable tracking: TELEGRAM_TRACKING=false');
     return { ok: false, error: err };
   }
 }
