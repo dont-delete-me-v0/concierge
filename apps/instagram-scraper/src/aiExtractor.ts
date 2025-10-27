@@ -292,45 +292,61 @@ export class OpenAIExtractor implements AIProvider {
   async extractEventInfo(
     post: InstagramPost
   ): Promise<ExtractedEventAI | null> {
-    const systemPrompt = `You are an expert at extracting structured event data from Ukrainian Instagram posts for a PostgreSQL database.
+    const currentDate = new Date().toISOString();
+    const currentYear = new Date().getFullYear();
 
-DATABASE SCHEMA (events table):
-- title: string (REQUIRED) - Event name or artist/performer name
-- description: string (optional but IMPORTANT) - DETAILED event description (2-5 sentences minimum)
-  Write a comprehensive description including: performers, special features, program details, target audience
-  Example: "Концерт гурту Океан Ельзи з презентацією нової програми. Глядачів чекають улюблені хіти та прем'єри нових пісень. Спеціальні візуальні ефекти та світлове шоу створять неповторну атмосферу."
-- category_name: string (optional) - MUST be one of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап
-- venue_name: string (optional) - Venue name only (e.g., "Atlas", not "Atlas, вул. Січових Стрільців")
-- date: string (optional) - Ukrainian format (DD month YYYY or DD.MM.YYYY)
-- time: string (optional) - 24-hour format (HH:MM)
-- price: number (optional) - Minimum price in UAH (numeric only)
+    const systemPrompt = `Extract FUTURE Ukrainian events from Instagram posts. Current date: ${currentDate} (${currentYear}).
 
-TASK: Determine if this is an UPCOMING event announcement and extract structured data for database storage.
+KEY RULES:
+1. Extract ONLY FUTURE events (after ${currentDate})
+2. Return structured JSON data
 
-IMPORTANT: If the same event is mentioned multiple times in the caption, extract it only once.
+REQUIRED FIELDS:
+- isEvent: boolean (true if future event with specific date)
+- title: event/artist name
+- venue: location name (check username, caption, location tag, @mentions)
+- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
+- date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
+- date_time_from/to: for date ranges (also set date_time to start)
+- price: minimum ticket price (number)
+- description: 2-5 sentences about performers, format, special features (remove emojis/hashtags)
+- confidence: 0.0-1.0
 
-Return JSON only, no explanation.`;
+DATE CONVERSION:
+- Kyiv timezone: UTC+2 winter, UTC+3 summer
+- "10 грудня 19:00" → "2025-12-10T17:00:00.000Z"
+- If no year: use ${currentYear}
+- If no time: use "00:00"
 
-    const userPrompt = `Extract structured event data from this Instagram post:
+EXAMPLES:
+✓ "Концерт 10 грудня" → extract if Dec 10 is in future
+✗ "Концерт був вчора" → skip (no specific date)
+✗ "Концерт 22 жовтня" → skip if Oct 22 already passed
+`;
+
+    const userPrompt = `Analyze this Instagram post. Extract ONLY FUTURE events (after ${currentDate}).
 
 Caption: ${post.caption || ''}
 Location: ${post.locationName || 'Not specified'}
-Posted: ${post.timestamp || 'Unknown'}
 
-Return JSON:
+Identify venue (check username/caption/location), convert Kyiv time to UTC ISO 8601.
+Write detailed 2-5 sentence descriptions.
+
+Return JSON (no markdown):
 {
   "isEvent": boolean,
-  "confidence": number (0-1),
+  "confidence": 0.0-1.0,
   "title": "string or null",
-  "description": "string or null",
   "venue": "string or null",
-  "date": "DD month YYYY or DD.MM.YYYY or null",
-  "time": "HH:MM or null",
+  "category": "string or null",
+  "date_time": "ISO 8601 UTC or null",
+  "date_time_from": "ISO 8601 UTC or null",
+  "date_time_to": "ISO 8601 UTC or null",
   "price": number or null,
-  "category": "Концерт/Театр/Виставка/Фестиваль/Вечірка/Стендап or null"
+  "description": "string or null"
 }
 
-If not an event, return {"isEvent": false}`;
+If not an event or past event, return {"isEvent": false}`;
 
     try {
       const response = await fetch(
@@ -414,39 +430,59 @@ export class ClaudeExtractor implements AIProvider {
   async extractEventInfo(
     post: InstagramPost
   ): Promise<ExtractedEventAI | null> {
-    const prompt = `You are extracting structured event data from Ukrainian Instagram posts for a PostgreSQL database.
+    const currentDate = new Date().toISOString();
+    const currentYear = new Date().getFullYear();
 
-DATABASE SCHEMA (events table):
-- title: string (REQUIRED) - Event name or artist/performer name
-- description: string (IMPORTANT) - DETAILED event description (2-5 sentences)
-  Include: who performs, event format, special features, what to expect, target audience
-  Make it informative and engaging for potential visitors
-- category_name: string - ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап
-- venue_name: string - Venue name only (e.g., "Atlas", not full address)
-- date: string - Ukrainian format (DD month YYYY or DD.MM.YYYY)
-- time: string - 24-hour format (HH:MM)
-- price: number - Minimum price in UAH (numeric only)
+    const prompt = `Extract FUTURE Ukrainian events from Instagram posts. Current date: ${currentDate} (${currentYear}).
+
+KEY RULES:
+1. Extract ONLY FUTURE events (after ${currentDate})
+2. Return structured JSON data
+
+REQUIRED FIELDS:
+- isEvent: boolean (true if future event with specific date)
+- title: event/artist name
+- venue: location name (check username, caption, location tag, @mentions)
+- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
+- date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
+- date_time_from/to: for date ranges (also set date_time to start)
+- price: minimum ticket price (number)
+- description: 2-5 sentences about performers, format, special features (remove emojis/hashtags)
+- confidence: 0.0-1.0
+
+DATE CONVERSION:
+- Kyiv timezone: UTC+2 winter, UTC+3 summer
+- "10 грудня 19:00" → "2025-12-10T17:00:00.000Z"
+- If no year: use ${currentYear}
+- If no time: use "00:00"
+
+EXAMPLES:
+✓ "Концерт 10 грудня" → extract if Dec 10 is in future
+✗ "Концерт був вчора" → skip (no specific date)
+✗ "Концерт 22 жовтня" → skip if Oct 22 already passed
 
 ANALYZE THIS POST:
 Caption: ${post.caption || ''}
 Location: ${post.locationName || 'Not specified'}
 
-TASK: Determine if this is an UPCOMING event announcement and extract structured data.
-
-IMPORTANT: If the same event is mentioned multiple times in the caption, extract it only once.
+Identify venue (check username/caption/location), convert Kyiv time to UTC ISO 8601.
+Write detailed 2-5 sentence descriptions.
 
 Return ONLY valid JSON, no markdown or explanation:
 {
   "isEvent": boolean,
-  "confidence": number (0-1),
+  "confidence": 0.0-1.0,
   "title": "string or null",
-  "description": "string or null",
   "venue": "string or null",
-  "date": "string or null",
-  "time": "string or null",
+  "category": "string or null",
+  "date_time": "ISO 8601 UTC or null",
+  "date_time_from": "ISO 8601 UTC or null",
+  "date_time_to": "ISO 8601 UTC or null",
   "price": number or null,
-  "category": "string or null"
-}`;
+  "description": "string or null"
+}
+
+If not an event or past event, return {"isEvent": false}`;
 
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -534,37 +570,59 @@ export class OllamaExtractor implements AIProvider {
   async extractEventInfo(
     post: InstagramPost
   ): Promise<ExtractedEventAI | null> {
-    const prompt = `Extract structured event data for PostgreSQL database from this Ukrainian Instagram post.
+    const currentDate = new Date().toISOString();
+    const currentYear = new Date().getFullYear();
 
-DATABASE SCHEMA:
-- title (REQUIRED): Event/artist name
-- description (IMPORTANT): Detailed description (2-5 sentences about performers, format, features)
-- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап
-- venue: Venue name only
-- date: DD month YYYY or DD.MM.YYYY
-- time: HH:MM (24-hour)
-- price: number (UAH)
+    const prompt = `Extract FUTURE Ukrainian events from Instagram posts. Current date: ${currentDate} (${currentYear}).
+
+KEY RULES:
+1. Extract ONLY FUTURE events (after ${currentDate})
+2. Return structured JSON data
+
+REQUIRED FIELDS:
+- isEvent: boolean (true if future event with specific date)
+- title: event/artist name
+- venue: location name (check username, caption, location tag, @mentions)
+- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
+- date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
+- date_time_from/to: for date ranges (also set date_time to start)
+- price: minimum ticket price (number)
+- description: 2-5 sentences about performers, format, special features (remove emojis/hashtags)
+- confidence: 0.0-1.0
+
+DATE CONVERSION:
+- Kyiv timezone: UTC+2 winter, UTC+3 summer
+- "10 грудня 19:00" → "2025-12-10T17:00:00.000Z"
+- If no year: use ${currentYear}
+- If no time: use "00:00"
+
+EXAMPLES:
+✓ "Концерт 10 грудня" → extract if Dec 10 is in future
+✗ "Концерт був вчора" → skip (no specific date)
+✗ "Концерт 22 жовтня" → skip if Oct 22 already passed
 
 POST:
 Caption: ${post.caption || ''}
 Location: ${post.locationName || ''}
 
-IMPORTANT: If the same event is mentioned multiple times, extract it only once.
+Identify venue (check username/caption/location), convert Kyiv time to UTC ISO 8601.
+Write detailed 2-5 sentence descriptions.
 
 Return JSON:
 {
   "isEvent": boolean,
-  "confidence": 0-1,
+  "confidence": 0.0-1.0,
   "title": "string or null",
-  "description": "string or null",
   "venue": "string or null",
-  "date": "string or null",
-  "time": "string or null",
+  "category": "string or null",
+  "date_time": "ISO 8601 UTC or null",
+  "date_time_from": "ISO 8601 UTC or null",
+  "date_time_to": "ISO 8601 UTC or null",
   "price": number or null,
-  "category": "string or null"
+  "description": "string or null"
 }
 
-If not an event, return {"isEvent": false}`;
+If not an event or past event, return {"isEvent": false}`;
 
     try {
       const response = await fetch(`${this.baseUrl}/api/generate`, {
