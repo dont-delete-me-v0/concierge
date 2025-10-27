@@ -2,6 +2,7 @@ import 'dotenv/config';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { normalizeCategory } from '@concierge/database';
 import {
   parseDateRangeUaToUtcIso,
   parseDateTimeUaToUtcIso,
@@ -112,10 +113,11 @@ async function runOnce(
             title: row.title,
             description: row.description,
             // Names for resolution on consumer side
-            category_name:
+            category_name: normalizeCategory(
               row.category ??
               row.category_name ??
-              (config.category_name || undefined),
+              config.category_name
+            ),
             venue_name: row.venue ?? row.venue_name,
             category_id: null,
             venue_id: null,
@@ -177,10 +179,11 @@ async function runOnce(
             id: computeRowHash(row, fallbackKeys),
             title: row.title,
             description: row.description,
-            category_name:
+            category_name: normalizeCategory(
               row.category ??
               row.category_name ??
-              (config.category_name || undefined),
+              config.category_name
+            ),
             venue_name: row.venue ?? row.venue_name,
             category_id: null,
             venue_id: null,
@@ -360,10 +363,11 @@ async function runOnce(
           id: computeRowHash(row, uniqueKey),
           title: row.title,
           description: row.description,
-          category_name:
+          category_name: normalizeCategory(
             row.category ??
             row.category_name ??
-            (config.category_name || undefined),
+            config.category_name
+          ),
           venue_name: row.venue ?? row.venue_name,
           category_id: null,
           venue_id: null,

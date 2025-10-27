@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Concierge is an events management system that scrapes Ukrainian event websites, stores event data in PostgreSQL, and provides access via a Telegram bot and REST API. The system consists of three main applications running in Docker containers with shared infrastructure (PostgreSQL, Redis, RabbitMQ).
+Concierge is an events management system that scrapes Ukrainian event websites and Instagram posts, stores event data in PostgreSQL, and provides access via a Telegram bot and REST API. The system consists of four main applications running in Docker containers with shared infrastructure (PostgreSQL, Redis, RabbitMQ):
+- **Web crawler** for traditional website scraping (Playwright-based)
+- **Instagram scraper** for social media event discovery (AI-powered extraction)
+- **REST API** for event management and search
+- **Telegram bot** for user interaction
 
 ## Architecture
 
@@ -12,6 +16,7 @@ Concierge is an events management system that scrapes Ukrainian event websites, 
 - **apps/api** - NestJS REST API for event management (port 3000)
 - **apps/bot** - NestJS Telegram bot with Telegraf (port 3001)
 - **apps/web-crawler** - Node.js web scraper with Playwright (runs on schedule)
+- **apps/instagram-scraper** - Instagram event scraper using Apify + AI extraction (runs on schedule)
 - **packages/database** - Prisma schema, migrations, backups, and PrismaService
 - **packages/eslint-config** - Shared ESLint configuration
 - **packages/prettier-config** - Shared Prettier configuration
@@ -19,11 +24,12 @@ Concierge is an events management system that scrapes Ukrainian event websites, 
 ### Message Flow Architecture
 
 1. **Web Crawler → RabbitMQ**: Crawler scrapes event websites and publishes event data to RabbitMQ queue
-2. **RabbitMQ → API Consumer**: API service consumes messages in batches and writes to PostgreSQL
-3. **API → Database**: All event data stored in PostgreSQL with categories, venues, and user preferences
-4. **Bot → API**: Telegram bot queries API for event search and retrieval
-5. **Bot → Redis**: Bot uses Redis for session management (user search state, pagination)
-6. **Bot → Database**: Direct database access for user management and favorites
+2. **Instagram Scraper → RabbitMQ**: Scrapes Instagram posts, extracts events via AI, publishes to same RabbitMQ queue
+3. **RabbitMQ → API Consumer**: API service consumes messages in batches and writes to PostgreSQL
+4. **API → Database**: All event data stored in PostgreSQL with categories, venues, and user preferences
+5. **Bot → API**: Telegram bot queries API for event search and retrieval
+6. **Bot → Redis**: Bot uses Redis for session management (user search state, pagination)
+7. **Bot → Database**: Direct database access for user management and favorites
 
 ### Data Flow
 
@@ -31,6 +37,10 @@ Concierge is an events management system that scrapes Ukrainian event websites, 
 Crawler (Playwright)
   → Scrapes events with incremental deduplication (Redis)
   → Publishes to RabbitMQ with batching
+Instagram Scraper (Apify + AI)
+  → Fetches Instagram posts via Apify
+  → Extracts event data using AI (Claude/GPT/Gemini)
+  → Publishes to RabbitMQ (same queue)
 API Consumer
   → Consumes RabbitMQ in batches (100 events)
   → Resolves categories/venues
@@ -147,6 +157,20 @@ npm run scheduler:start --workspace=apps/web-crawler  # Run built version
 # Daily digest (manual trigger)
 npm run digest:dev --workspace=apps/bot    # Run daily digest in dev mode
 npm run digest --workspace=apps/bot        # Run built digest
+```
+
+### Instagram Scraper
+```bash
+# Run scraper manually (from root or apps/instagram-scraper/)
+npm run dev --workspace=apps/instagram-scraper       # Single run with AI extraction
+npm run scheduler --workspace=apps/instagram-scraper # Run scheduler in dev mode
+npm run scheduler:start --workspace=apps/instagram-scraper # Run built scheduler
+
+# Production/Docker commands
+make instagram-logs       # View Instagram scraper logs
+make instagram-run        # Run scraper once (local)
+make instagram-scheduler  # Start scheduler (local)
+make instagram-build      # Build Instagram scraper
 ```
 
 ## Key Technical Details
@@ -325,6 +349,53 @@ npm run digest --workspace=apps/bot        # Run built digest
 - `DIGEST_CRON` - Cron schedule for daily digest (default: 0 8 * * *)
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` (legacy, kept for compatibility)
 
+### Instagram Scraper (apps/instagram-scraper)
+
+**AI-powered Instagram scraper** using Apify + LLM extraction:
+- **Main entry**: `src/index.ts` - scrapes Instagram posts and extracts event data using AI
+- **Scheduler**: `src/scheduler.ts` - runs scraper on cron schedule (configurable via INSTAGRAM_CRON)
+- **Apify integration**: Uses Apify Instagram Profile Scraper actor to fetch posts
+  - Supports scraping by accounts, hashtags, or locations
+  - Configurable results limit per source
+- **AI extraction**: `src/aiExtractor.ts`
+  - Supports multiple AI providers: Anthropic (Claude), OpenAI (GPT), Google (Gemini), Groq
+  - **Batch processing with chunking**: Splits posts into chunks of 10 for efficient processing (optimized for llama-3.3-70b-versatile with 12000 TPM limit)
+  - Extracts structured event data from Instagram post captions and metadata
+  - Confidence scoring: only publishes events above minimum threshold (default: 0.7)
+  - Rate limiting: 30-second delay between chunks to stay under TPM limit (2 chunks per minute = 10512 tokens < 12000)
+- **Date parsing**: `src/dateUtils.ts` - parses Ukrainian/English date formats from captions
+- **RabbitMQ publisher**: `src/rabbitmq.ts` - publishes extracted events to same queue as web-crawler
+- **Tracker**: `src/tracker.ts` - sends Telegram notifications on scraper progress/errors
+
+**Key environment variables**:
+- `APIFY_TOKEN` - Apify API token (required)
+- `APIFY_ACTOR_ID` - Instagram scraper actor ID (default: apify/instagram-profile-scraper)
+- `INSTAGRAM_ACCOUNTS` - Comma-separated list of Instagram usernames to scrape
+- `INSTAGRAM_HASHTAGS` - Comma-separated list of hashtags to scrape (optional)
+- `INSTAGRAM_LOCATIONS` - Comma-separated list of location IDs (optional)
+- `INSTAGRAM_RESULTS_LIMIT` - Max posts per source (default: 30)
+- `INSTAGRAM_CRON` - Cron schedule (default: 0 */3 * * * - every 3 hours)
+- `AI_PROVIDER` - AI provider: anthropic | openai | google (default: anthropic)
+- `ANTHROPIC_API_KEY` - Claude API key (if using anthropic provider)
+- `OPENAI_API_KEY` - OpenAI API key (if using openai provider)
+- `GOOGLE_API_KEY` - Google AI API key (if using google provider)
+- `AI_MODEL` - Model name (optional, uses provider default)
+- `MIN_CONFIDENCE` - Minimum confidence score for event extraction (default: 0.7)
+- `RABBITMQ_URL`, `RABBITMQ_QUEUE` - RabbitMQ connection (shares queue with web-crawler)
+- `TELEGRAM_TRACKER_TOKEN`, `TELEGRAM_CHAT_ID` - Telegram notifications
+
+**AI extraction flow**:
+1. Fetch Instagram posts via Apify (accounts/hashtags/locations) - separate API calls per source type
+2. For each post: extract caption, timestamp, ownerUsername, url
+3. **Batch processing with chunking**: Split posts into chunks of 10 (optimized for llama-3.3-70b-versatile, 12000 TPM limit)
+4. Send each chunk to AI with structured prompt requesting event data
+5. AI responds with JSON array: [{isEvent, title, dateTime, venue, price, category, confidence, reasoning}, ...]
+6. Combine all chunk results with 30-second delay between chunks to stay under TPM limit (2 chunks/min = 10512 tokens < 12000)
+7. Filter by confidence threshold (MIN_CONFIDENCE, default: 0.7)
+8. Deduplicate events by ID and semantic key (title + date)
+9. Publish to RabbitMQ with same format as web-crawler events
+10. Fallback to single-post processing if batch processing fails
+
 ### Database Schema
 
 **ORM**: The project uses **Prisma** as the ORM for database operations.
@@ -334,6 +405,11 @@ npm run digest --workspace=apps/bot        # Run built digest
 - **Shared service**: `packages/database/src/prisma.service.ts` - PrismaService for both API and Bot
 - **Generated client**: `@prisma/client` - auto-generated TypeScript client
 - **Database**: PostgreSQL
+- **Category system**: `packages/database/src/categories.ts` - standardized category mapping
+  - Exports `STANDARD_CATEGORIES` (Ukrainian category names)
+  - `CATEGORY_MAPPING` maps English/various names → Ukrainian standards
+  - `normalizeCategory()` function for consistent category resolution
+  - Used by both web-crawler and Instagram scraper for unified categorization
 
 **Key Prisma commands**:
 ```bash
@@ -397,14 +473,22 @@ To add tests:
 - `CONSUMER_BATCH_SIZE=100` - RabbitMQ consumer batch size
 - `STATE_PREFIX=concert.ua` - Redis key prefix for crawler state
 
+**Instagram scraper** (optional if using Instagram scraping):
+- `APIFY_TOKEN` - Apify API token
+- `INSTAGRAM_ACCOUNTS` - Comma-separated Instagram usernames
+- `AI_PROVIDER` - AI provider: anthropic | openai | google
+- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` or `GOOGLE_API_KEY` - AI API key
+- `MIN_CONFIDENCE=0.7` - Minimum confidence for event extraction
+
 ## Common Patterns
 
 ### Adding a new scraper config
 1. Create JSON config in `apps/web-crawler/crawl-configs/<site>/<city>/`
 2. Define selectors (must include at least: title, link, dateTime)
 3. Set `incremental.uniqueKey` to identify duplicate events
-4. Test locally: `npm run dev --workspace=apps/web-crawler path/to/config.json`
-5. For production: Docker rebuilds and scheduler picks up new configs
+4. Use English category names in config - they'll be auto-normalized to Ukrainian via `normalizeCategory()` from `packages/database/src/categories.ts`
+5. Test locally: `npm run dev --workspace=apps/web-crawler path/to/config.json`
+6. For production: Docker rebuilds and scheduler picks up new configs
 
 ### Modifying bot commands
 - Add/update handlers in `apps/bot/src/bot.update.ts` using Telegraf decorators:
@@ -438,6 +522,15 @@ npx prisma db push  # Push schema changes directly to database without creating 
 - Initial SQL files in `packages/database/init/` run on first container start
 - These are now superseded by Prisma schema in `prisma/schema.prisma`
 - Always backup before schema changes: `make backup`
+
+### Configuring Instagram scraper
+1. **Get Apify token**: Sign up at apify.com and get API token
+2. **Configure AI provider**: Set `AI_PROVIDER` (anthropic/openai/google/groq) and corresponding API key
+3. **Set Instagram sources**: Add accounts to `INSTAGRAM_ACCOUNTS` env var (comma-separated)
+4. **Test locally**: `npm run dev --workspace=apps/instagram-scraper` or `make instagram-run`
+5. **Adjust confidence threshold**: Tune `MIN_CONFIDENCE` (0.0-1.0) based on extraction quality
+6. **For production**: Docker rebuilds and scheduler picks up new configuration
+7. **Category normalization**: AI extracts categories in any language, but they're normalized to Ukrainian standards via `normalizeCategory()`
 
 ## Architectural Patterns & Design Decisions
 
@@ -485,6 +578,11 @@ npx prisma db push  # Push schema changes directly to database without creating 
 - **Prices**: Stored as Decimal(12,2) to avoid float precision issues
 - **IDs**: Deterministic hashing for events (content-based), venues (name+address), categories (name+parentId)
 - **Text encoding**: All text stored in UTF-8 (supports Ukrainian Cyrillic)
+- **Categories**: All category names normalized to Ukrainian standards via `normalizeCategory()` function
+  - Web-crawler: English names in configs (e.g., "concert", "theater") → Ukrainian
+  - Instagram scraper: AI extracts in any language → normalized to Ukrainian
+  - API/Bot: Always work with Ukrainian category names
+  - Ensures consistency across all event sources
 
 ## Important Notes
 

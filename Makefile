@@ -1,8 +1,8 @@
 .PHONY: start-dev backup backup-manual restore list-backups db-backup-logs \
 	docker-build docker-up docker-down docker-restart docker-logs docker-ps \
 	docker-dev-build docker-dev-up docker-dev-down docker-dev-restart docker-dev-logs \
-	dev-infra dev-infra-down dev-api dev-bot dev-crawler \
-	crawler-logs crawler-health
+	dev-infra dev-infra-down dev-api dev-bot dev-crawler dev-instagram \
+	crawler-logs crawler-health instagram-logs instagram-run instagram-scheduler
 
 start-dev:
 	cd apps/web-crawler && npm run dev
@@ -47,6 +47,10 @@ dev-bot:
 dev-crawler:
 	@echo "Starting Web Crawler in development mode..."
 	@npm run dev --workspace=apps/web-crawler
+
+dev-instagram:
+	@echo "Starting Instagram Scraper in development mode..."
+	@npm run dev --workspace=apps/instagram-scraper
 
 # Docker commands (production)
 docker-build:
@@ -109,3 +113,20 @@ crawler-logs:
 crawler-health:
 	@echo "Checking crawler health..."
 	@docker exec concierge-web-crawler cat /var/log/crawler/health.log 2>/dev/null | tail -10 || echo "Health log not yet available"
+
+# Instagram scraper commands
+instagram-logs:
+	@echo "Instagram scraper logs (Ctrl+C to exit):"
+	@docker logs concierge-instagram-scraper --tail=50 -f
+
+instagram-run:
+	@echo "Running Instagram scraper once..."
+	@npm run dev --workspace=apps/instagram-scraper
+
+instagram-scheduler:
+	@echo "Starting Instagram scraper scheduler..."
+	@npm run scheduler --workspace=apps/instagram-scraper
+
+instagram-build:
+	@echo "Building Instagram scraper..."
+	@npm run build --workspace=apps/instagram-scraper
