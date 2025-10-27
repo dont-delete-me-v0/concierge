@@ -1,6 +1,8 @@
 import crypto from 'crypto';
 import { normalizeCategory } from '@concierge/database';
 import { Event, InstagramPost } from './types';
+import OpenAI from 'openai';
+import { encoding_for_model, TiktokenModel } from 'tiktoken';
 
 export interface AIProvider {
   extractEventInfo(post: InstagramPost): Promise<ExtractedEventAI | null>;
@@ -278,140 +280,350 @@ CRITICAL:
 }
 
 /**
- * OpenAI GPT-based event extractor
+ * OpenAI GPT-based event extractor with official SDK and optimizations
  */
 export class OpenAIExtractor implements AIProvider {
-  private apiKey: string;
+  private client: OpenAI;
   private model: string;
+  private encoding: any; // tiktoken encoder
+
+  // Token limits for GPT-4o mini (128k total context window)
+  private readonly MAX_INPUT_TOKENS = 120000; // Leave 8k for output
+  private readonly MAX_OUTPUT_TOKENS = 8000; // Conservative output reservation
 
   constructor(apiKey: string, model = 'gpt-4o-mini') {
-    this.apiKey = apiKey;
+    this.client = new OpenAI({ apiKey });
     this.model = model;
+
+    // Initialize tiktoken for token counting
+    try {
+      // gpt-4o-mini uses same tokenizer as gpt-4o
+      this.encoding = encoding_for_model('gpt-4o' as TiktokenModel);
+    } catch (error) {
+      console.warn('⚠️ Failed to load tiktoken, using estimates:', error);
+      this.encoding = null;
+    }
   }
 
-  async extractEventInfo(
-    post: InstagramPost
-  ): Promise<ExtractedEventAI | null> {
+  /**
+   * Count tokens in a string using tiktoken
+   */
+  private countTokens(text: string): number {
+    if (!this.encoding) {
+      // Rough estimate: ~4 chars per token
+      return Math.ceil(text.length / 4);
+    }
+
+    try {
+      return this.encoding.encode(text).length;
+    } catch (error) {
+      console.warn('Token counting failed:', error);
+      return Math.ceil(text.length / 4);
+    }
+  }
+
+  /**
+   * Build chunks based on actual token count
+   */
+  private buildOptimalChunks(posts: InstagramPost[]): InstagramPost[][] {
+    const chunks: InstagramPost[][] = [];
+    let currentChunk: InstagramPost[] = [];
+
     const currentDate = new Date().toISOString();
     const currentYear = new Date().getFullYear();
 
-    const systemPrompt = `Extract FUTURE Ukrainian events from Instagram posts. Current date: ${currentDate} (${currentYear}).
+    // Base system prompt tokens
+    const systemPromptBase = `Extract FUTURE Ukrainian events from Instagram. Today: ${currentDate}...`; // truncated for counting
+    const systemTokens = this.countTokens(systemPromptBase) + 500; // Add buffer for full prompt
 
-KEY RULES:
-1. Extract ONLY FUTURE events (after ${currentDate})
-2. Return structured JSON data
+    // Reserve tokens for output and safety margin
+    const reservedTokens = this.MAX_OUTPUT_TOKENS + systemTokens + 2000; // 2000 safety buffer
+    const maxInputTokens = this.MAX_INPUT_TOKENS - reservedTokens;
 
-REQUIRED FIELDS:
-- isEvent: boolean (true if future event with specific date)
-- title: event/artist name
-- venue: location name (check username, caption, location tag, @mentions)
-- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
-- date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
-- date_time_from/to: for date ranges (also set date_time to start)
-- price: minimum ticket price (number)
-- description: 2-5 sentences about performers, format, special features (remove emojis/hashtags)
-- confidence: 0.0-1.0
+    console.log(`📊 Token budget: ${maxInputTokens} tokens available for posts (${this.MAX_INPUT_TOKENS} total - ${reservedTokens} reserved)`);
 
-DATE CONVERSION:
-- Kyiv timezone: UTC+2 winter, UTC+3 summer
-- "10 грудня 19:00" → "2025-12-10T17:00:00.000Z"
-- If no year: use ${currentYear}
-- If no time: use "00:00"
+    let currentTokens = 0;
+
+    for (const post of posts) {
+      // Calculate tokens for this post
+      const postData = {
+        i: currentChunk.length,
+        u: post.ownerUsername,
+        c: post.caption?.substring(0, 1000) || '',
+        l: post.locationName || '',
+      };
+
+      const postTokens = this.countTokens(JSON.stringify(postData));
+
+      // Check if adding this post would exceed limit
+      if (currentTokens + postTokens > maxInputTokens && currentChunk.length > 0) {
+        // Save current chunk and start new one
+        console.log(`📦 Chunk filled: ${currentChunk.length} posts, ~${currentTokens} tokens`);
+        chunks.push([...currentChunk]);
+        currentChunk = [post];
+        currentTokens = postTokens;
+      } else {
+        // Add to current chunk
+        currentChunk.push(post);
+        currentTokens += postTokens;
+      }
+    }
+
+    // Add remaining posts
+    if (currentChunk.length > 0) {
+      console.log(`📦 Final chunk: ${currentChunk.length} posts, ~${currentTokens} tokens`);
+      chunks.push(currentChunk);
+    }
+
+    return chunks;
+  }
+
+  /**
+   * Extract events from multiple posts using batch processing
+   */
+  async extractEventsBatch(
+    posts: InstagramPost[]
+  ): Promise<ExtractedEventAI[]> {
+    if (!posts || posts.length === 0) return [];
+
+    const currentDate = new Date().toISOString();
+    const currentYear = new Date().getFullYear();
+
+    // Build optimal chunks based on actual token count
+    const chunks = this.buildOptimalChunks(posts);
+    console.log(`📊 Optimized into ${chunks.length} chunk(s) for GPT-4o mini`);
+
+    // Process in chunks
+    const allResults: ExtractedEventAI[] = [];
+    let processedPosts = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const chunkStart = processedPosts;
+      const chunkEnd = processedPosts + chunk.length;
+
+      console.log(`\n🔄 Processing chunk ${i + 1}/${chunks.length} (posts ${chunkStart}-${chunkEnd - 1}, ${chunk.length} posts)`);
+
+      try {
+        const results = await this.processChunk(chunk, chunkStart, currentDate, currentYear);
+        allResults.push(...results);
+        processedPosts += chunk.length;
+
+        // Rate limiting between chunks (only if multiple chunks)
+        if (i < chunks.length - 1) {
+          console.log('⏸️ Rate limit pause: 1 second...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        console.error(`❌ Chunk ${i + 1} failed:`, error);
+        // Add empty results for failed chunk
+        for (let j = 0; j < chunk.length; j++) {
+          allResults.push({
+            isEvent: false,
+            confidence: 0,
+            postIndex: chunkStart + j,
+            postId: chunk[j]?.id,
+          });
+        }
+        processedPosts += chunk.length;
+      }
+    }
+
+    return allResults;
+  }
+
+  /**
+   * Process a single chunk of posts
+   */
+  private async processChunk(
+    posts: InstagramPost[],
+    chunkOffset: number,
+    currentDate: string,
+    currentYear: number
+  ): Promise<ExtractedEventAI[]> {
+    // Strict prompt - extract only what's explicitly stated
+    const systemPrompt = `Extract Ukrainian EVENT ANNOUNCEMENTS (афіші) from Instagram. Today: ${currentDate}
+
+CRITICAL RULES:
+1. ONLY АФІШІ (event announcements) - not reviews, not impressions
+2. Extract ONLY what's EXPLICITLY stated in text
+3. DON'T INVENT: if no price → null, no venue → null, no date → null
+4. Analyze ALL posts, return results for each
+
+WHAT IS AN EVENT (афіша):
+✓ Event announcement with details: "Концерт 15 листопада", "Скоро тур", "Квитки у продажу"
+✓ Promotional posts: dates, ticket info, venue info
+✓ Can be with or without specific date ("Скоро концерт" = event if clearly future)
+
+WHAT IS NOT AN EVENT (skip these):
+✗ Past events: "Концерт був чудовий", "Дякую за вечір", "Як це було"
+✗ Reviews/impressions: "відвідати концерт", "отримати задоволення", "я ваша прихильниця"
+✗ Concert photos without future event info
+✗ General recommendations without specific event details
+✗ Hashtag-only posts without context
+
+OUTPUT FORMAT (JSON object):
+{"posts": [{"idx": 0, "evts": [{evt}, ...]}, {"idx": 1, "evts": []}, ...]}
+
+EVENT FIELDS (evt) - ONLY if EXPLICITLY stated:
+- e: true (is event)
+- c: 0.0-1.0 (confidence: high if clear date, medium if vague "скоро")
+- t: "title" (artist/event name from text)
+- v: "venue" or null (ONLY if mentioned: location tag, @mention, or text)
+- cat: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Екскурсія|Інше
+- dt: ISO UTC or null (if date mentioned: convert Kyiv→UTC, if no date: null)
+- dtf/dtt: date range (ISO UTC) or null
+- p: price number or null (ONLY if stated: "500 грн", "від 300")
+- d: 2-5 sentences factual description from text
+
+DATE PARSING (if date mentioned):
+- Kyiv UTC+2 winter, UTC+3 summer → UTC
+- "10 грудня 19:00" → "2025-12-10T17:00:00Z"
+- No year → ${currentYear}, no time → "00:00"
+- Past date → skip (not event)
+- No date ("скоро", "незабаром") → dt:null
 
 EXAMPLES:
-✓ "Концерт 10 грудня" → extract if Dec 10 is in future
-✗ "Концерт був вчора" → skip (no specific date)
-✗ "Концерт 22 жовтня" → skip if Oct 22 already passed
-`;
+✓ "Концерт Скрипки 15 листопада, квитки 500 грн" → АФІША: all fields filled
+✓ "Вистава 20.11 у Театрі Франка" → АФІША: v="Театр Франка", p=null, dt="2025-11-20T00:00:00Z"
+✓ "Скоро концерт Monatik! Квитки у продажу" → АФІША: t="Monatik", dt=null
+✗ "Концерт був чудовий!" → PAST EVENT (skip)
+✗ "Як отримати задоволення? Відвідати концерт" → REVIEW/RECOMMENDATION (skip)
+✗ "Я ваша прихильниця ❤️ #концерт" → IMPRESSION (skip)
+✗ "#kyivconcert" (only hashtags) → NO CONTEXT (skip)`;
 
-    const userPrompt = `Analyze this Instagram post. Extract ONLY FUTURE events (after ${currentDate}).
+    // Prepare posts data (compact format with FULL captions)
+    const postsData = posts.map((post, idx) => ({
+      i: idx,
+      u: post.ownerUsername,
+      c: post.caption || '', // Full caption without truncation
+      l: post.locationName || '',
+    }));
 
-Caption: ${post.caption || ''}
-Location: ${post.locationName || 'Not specified'}
+    const userPrompt = `Analyze ${posts.length} posts. Extract ONLY АФІШІ (event announcements), skip reviews/impressions.
 
-Identify venue (check username/caption/location), convert Kyiv time to UTC ISO 8601.
-Write detailed 2-5 sentence descriptions.
+POSTS DATA:
+${JSON.stringify(postsData)}
 
-Return JSON (no markdown):
-{
-  "isEvent": boolean,
-  "confidence": 0.0-1.0,
-  "title": "string or null",
-  "venue": "string or null",
-  "category": "string or null",
-  "date_time": "ISO 8601 UTC or null",
-  "date_time_from": "ISO 8601 UTC or null",
-  "date_time_to": "ISO 8601 UTC or null",
-  "price": number or null,
-  "description": "string or null"
-}
+INSTRUCTIONS:
+- Read each post carefully
+- Identify if it's АФІША (event announcement with promotional intent)
+- SKIP: reviews ("як це було"), impressions ("отримати задоволення"), past events, hashtag-only posts
+- Extract ONLY information that's EXPLICITLY stated
+- If date not mentioned → dt:null
+- If price not mentioned → p:null
+- If venue not mentioned → v:null
+- If date exists: convert Kyiv time to UTC ISO format
+- Write factual descriptions based on text
 
-If not an event or past event, return {"isEvent": false}`;
+Return JSON: {"posts": [{"idx": 0, "evts": [{e:true, c:0.8, t:"...", v:null, cat:"...", dt:null, p:null, d:"..."}, ...]}, {"idx": 1, "evts": []}, ...]}`;
+
+    // Count tokens before sending (for logging)
+    const inputTokens = this.countTokens(systemPrompt + userPrompt);
+    console.log(`📊 Input tokens: ~${inputTokens}`);
+
+    // Note: Chunks are pre-optimized by buildOptimalChunks, so should never exceed limit
+    if (inputTokens > this.MAX_INPUT_TOKENS) {
+      console.error(`⚠️ Unexpected: chunk exceeded token limit (${inputTokens} tokens). This shouldn't happen!`);
+    }
 
     try {
-      const response = await fetch(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: this.model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            temperature: 0.3,
-            response_format: { type: 'json_object' },
-          }),
+      const completion = await this.client.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+        max_tokens: Math.min(this.MAX_OUTPUT_TOKENS, 8000), // Ensure we don't request too many
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (!content) {
+        console.error('No content in OpenAI response');
+        return [];
+      }
+
+      // Log token usage
+      console.log(`📊 Tokens used - Input: ${completion.usage?.prompt_tokens}, Output: ${completion.usage?.completion_tokens}, Total: ${completion.usage?.total_tokens}`);
+
+      // Parse compact response
+      const result = JSON.parse(content);
+      const postsResults = Array.isArray(result) ? result : (result.posts || result.results || []);
+      console.log(`✅ Received AI response with ${postsResults.length} post(s) analyzed`);
+
+      const allResults: ExtractedEventAI[] = [];
+
+      for (const postData of postsResults) {
+        const postIndex = postData.idx ?? allResults.length;
+        const actualIndex = chunkOffset + postIndex; // Adjust for chunk offset
+        const events = postData.evts || [];
+
+        if (events.length === 0) {
+          // No events in this post
+          allResults.push({
+            isEvent: false,
+            confidence: 0,
+            postIndex: actualIndex,
+            postId: posts[postIndex]?.id,
+          });
+        } else {
+          // Process each event from this post
+          for (const evt of events) {
+            const mapped: ExtractedEventAI = {
+              isEvent: evt.e === true,
+              confidence: evt.c || 0.7,
+              title: evt.t,
+              venue: evt.v,
+              category: evt.cat,
+              description: evt.d,
+              price: typeof evt.p === 'number' ? evt.p : undefined,
+              date_time: evt.dt,
+              date_time_from: evt.dtf,
+              date_time_to: evt.dtt,
+              postIndex: actualIndex,
+              postId: posts[postIndex]?.id,
+            };
+
+            if (mapped.isEvent) {
+              const venueInfo = mapped.venue ? `venue: ${mapped.venue}` : 'venue: NOT FOUND';
+              const priceInfo = mapped.price !== undefined ? `price: ${mapped.price}` : 'price: NOT FOUND';
+              console.log(`  ✅ Event: "${mapped.title}" from post ${actualIndex} (@${posts[postIndex]?.ownerUsername})`);
+              console.log(`      ${venueInfo}, ${priceInfo}`);
+            }
+
+            allResults.push(mapped);
+          }
         }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`OpenAI API error (${response.status}):`, errorText);
-        return null;
       }
 
-      const data = (await response.json()) as any;
-
-      // Check if response has expected structure
-      if (
-        !data.choices ||
-        !Array.isArray(data.choices) ||
-        data.choices.length === 0
-      ) {
-        console.error(
-          'Unexpected OpenAI API response structure:',
-          JSON.stringify(data, null, 2)
-        );
-        return null;
-      }
-
-      const result = JSON.parse(data.choices[0].message.content);
-
-      if (!result.isEvent) {
-        return null;
-      }
-
-      return {
-        isEvent: true,
-        confidence: result.confidence || 0.8,
-        title: result.title,
-        venue: result.venue,
-        category: result.category,
-        description: result.description || undefined,
-        price: typeof result.price === 'number' ? result.price : (result.price ? parseFloat(result.price) : undefined),
-        date_time: result.date_time,
-        date_time_from: result.date_time_from,
-        date_time_to: result.date_time_to,
-      };
+      return allResults;
     } catch (error) {
-      console.error('OpenAI extraction failed:', error);
-      return null;
+      if (error instanceof OpenAI.APIError) {
+        console.error(`OpenAI API Error: ${error.status} - ${error.message}`);
+
+        // Handle rate limits
+        if (error.status === 429) {
+          console.log('⏳ Rate limited, waiting 60 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 60000));
+          // Retry once
+          return this.processChunk(posts, chunkOffset, currentDate, currentYear);
+        }
+      }
+      throw error;
     }
+  }
+
+  /**
+   * Extract event from a single post (fallback)
+   */
+  async extractEventInfo(
+    post: InstagramPost
+  ): Promise<ExtractedEventAI | null> {
+    // Use batch processing for single post
+    const results = await this.extractEventsBatch([post]);
+    return results[0] || null;
   }
 }
 

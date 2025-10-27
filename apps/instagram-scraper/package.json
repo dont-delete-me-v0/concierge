@@ -18,7 +18,9 @@
     "dotenv": "^16.4.7",
     "luxon": "^3.5.0",
     "node-telegram-bot-api": "^0.66.0",
-    "redis": "^4.7.1"
+    "openai": "^6.7.0",
+    "redis": "^4.7.1",
+    "tiktoken": "^1.0.22"
   },
   "devDependencies": {
     "@types/amqplib": "^0.10.5",

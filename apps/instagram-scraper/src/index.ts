@@ -209,14 +209,14 @@ export class InstagramScraper {
 
     // Check if batch extraction is supported
     if (this.aiExtractor.extractEventsBatch) {
-      console.log(`🚀 Using batch extraction with chunking (optimized for llama-3.3-70b-versatile)...`);
+      console.log(`🚀 Using batch extraction with intelligent chunking...`);
 
-      // Split posts into chunks to avoid token limits
-      // llama-3.3-70b-versatile TPM limit: 12000 tokens per minute
-      // Measured usage: 10 posts = ~5256 tokens
-      // Safe strategy: 30s delay allows ~2 chunks per minute (10512 tokens < 12000)
-      const CHUNK_SIZE = 10; // Process 10 posts per chunk
-      const CHUNK_DELAY_MS = 30000; // 30 seconds delay between chunks to stay under 12000 TPM
+      // Dynamic chunk sizing based on AI provider
+      // - Groq (llama-3.3-70b): 10 posts per chunk, 30s delay (TPM limit: 12000)
+      // - OpenAI (gpt-4o-mini): Dynamic sizing up to 20 posts (handled internally)
+      const isGroq = this.config.aiProvider === 'groq';
+      const CHUNK_SIZE = isGroq ? 10 : 100; // OpenAI will handle its own chunking
+      const CHUNK_DELAY_MS = isGroq ? 30000 : 0; // Groq needs delay for TPM limit
       const chunks: InstagramPost[][] = [];
 
       for (let i = 0; i < validPosts.length; i += CHUNK_SIZE) {
@@ -255,9 +255,9 @@ export class InstagramScraper {
 
           allAiResults.push(...correctedResults);
 
-          // Small delay between chunks to avoid rate limiting
-          if (chunkIdx < chunks.length - 1) {
-            console.log(`⏸️  Waiting ${CHUNK_DELAY_MS / 1000} seconds before next chunk...`);
+          // Small delay between chunks to avoid rate limiting (Groq only)
+          if (chunkIdx < chunks.length - 1 && CHUNK_DELAY_MS > 0) {
+            console.log(`⏸️  Waiting ${CHUNK_DELAY_MS / 1000} seconds before next chunk (Groq TPM limit)...`);
             await this.delay(CHUNK_DELAY_MS);
           }
         } catch (error) {
