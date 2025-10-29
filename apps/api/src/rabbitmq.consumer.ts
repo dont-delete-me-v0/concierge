@@ -150,6 +150,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         date_time_to: payload.date_time_to ?? null,
         price_from: payload.price_from ?? null,
         source_url: normalizeUrl(payload.source_url ?? payload.link ?? null),
+        image_url: normalizeUrl(payload.image_url ?? null),
       });
       this.channel.ack(msg);
       this.logger.debug(`Acked message id=${payload.id}`);
@@ -202,6 +203,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
           date_time_to: string | null;
           price_from: number | null;
           source_url: string | null;
+          image_url: string | null;
         }>;
         for (const p of valid) {
           let venueId: string | null = p.venue_id ?? null;
@@ -233,6 +235,14 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
               .catch(() => null);
           }
 
+          // Debug logging for image_url
+          const imageUrl = p.image_url ?? null;
+          if (imageUrl) {
+            this.logger.debug(`📸 Processing event "${p.title}" with image_url: ${imageUrl}`);
+          } else {
+            this.logger.debug(`⚠️ Processing event "${p.title}" WITHOUT image_url`);
+          }
+
           resolved.push({
             id: p.id,
             title: p.title ?? null,
@@ -244,6 +254,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
             date_time_to: p.date_time_to ?? null,
             price_from: p.price_from ?? null,
             source_url: p.source_url ?? p.link ?? null,
+            image_url: imageUrl,
           });
         }
 

@@ -1,6 +1,6 @@
 import { Ctx, Hears, InjectBot, On, Start, Update } from 'nestjs-telegraf';
 import type { Context, Scenes } from 'telegraf';
-import { Markup } from 'telegraf';
+import { Markup, Input } from 'telegraf';
 import { EventsApiService } from './events-api.service';
 import { formatEventCard, mainKeyboard, resolveEventUrl } from './keyboards';
 import { UserService } from './user.service';
@@ -32,6 +32,89 @@ export class BotUpdate {
 
   private generateSearchToken(): string {
     return Math.random().toString(36).slice(2, 10);
+  }
+
+  /**
+   * Send event with photo if available, otherwise send as text
+   */
+  private async sendEventWithPhoto(
+    ctx: BotContext,
+    event: import('./events-api.service').EventItem,
+    keyboard?: any
+  ) {
+    const caption = formatEventCard(event);
+
+    console.log('[sendEventWithPhoto] Event ID:', event.id);
+    console.log('[sendEventWithPhoto] Has imageUrl:', !!event.imageUrl);
+    if (event.imageUrl) {
+      console.log('[sendEventWithPhoto] Image URL:', event.imageUrl.substring(0, 100) + '...');
+    }
+
+    if (event.imageUrl) {
+      try {
+        console.log('[sendEventWithPhoto] Attempting to send photo...');
+        await ctx.replyWithPhoto(Input.fromURL(event.imageUrl), {
+          caption,
+          parse_mode: 'HTML',
+          ...keyboard,
+        });
+        console.log('[sendEventWithPhoto] Photo sent successfully!');
+        return;
+      } catch (error) {
+        console.error('[sendEventWithPhoto] Failed to send photo, falling back to text:', error);
+        console.error('[sendEventWithPhoto] Error details:', JSON.stringify(error, null, 2));
+        // Fallback to text if photo fails
+      }
+    } else {
+      console.log('[sendEventWithPhoto] No imageUrl, sending as text');
+    }
+
+    // No image or photo failed - send as text
+    await ctx.replyWithHTML(caption, keyboard);
+  }
+
+  /**
+   * Edit event message - for navigation (prev/next)
+   * Note: Can't edit message media type, so we delete and resend with photo
+   */
+  private async editEventMessage(
+    ctx: BotContext,
+    event: import('./events-api.service').EventItem,
+    keyboard?: any
+  ) {
+    const caption = formatEventCard(event);
+
+    console.log('[editEventMessage] Event ID:', event.id, 'Has imageUrl:', !!event.imageUrl);
+
+    // If event has image, always delete and resend to ensure photo is displayed
+    if (event.imageUrl) {
+      console.log('[editEventMessage] Event has image, deleting old message and sending new with photo');
+      try {
+        await ctx.deleteMessage();
+      } catch {}
+
+      await this.sendEventWithPhoto(ctx, event, keyboard);
+      return;
+    }
+
+    // Try to edit text first (works if previous message was text)
+    try {
+      console.log('[editEventMessage] Trying to edit message text...');
+      await ctx.editMessageText(caption, {
+        parse_mode: 'HTML',
+        ...keyboard,
+      });
+      console.log('[editEventMessage] Message text edited successfully');
+      return;
+    } catch (error) {
+      // If editing fails, delete old message and send new one
+      console.log('[editEventMessage] Failed to edit text, deleting and resending');
+      try {
+        await ctx.deleteMessage();
+      } catch {}
+
+      await this.sendEventWithPhoto(ctx, event, keyboard);
+    }
   }
 
   /**
@@ -220,8 +303,9 @@ export class BotUpdate {
     ctx.session.view = 'card';
     ctx.session.searchToken = this.generateSearchToken();
     const first = events[0];
-    await ctx.replyWithHTML(
-      formatEventCard(first),
+    await this.sendEventWithPhoto(
+      ctx,
+      first,
       await this.buildCardKeyboard(
         first,
         0,
@@ -329,8 +413,9 @@ export class BotUpdate {
     ctx.session.view = 'card';
     ctx.session.searchToken = this.generateSearchToken();
     const first = events[0];
-    await ctx.replyWithHTML(
-      formatEventCard(first),
+    await this.sendEventWithPhoto(
+      ctx,
+      first,
       await this.buildCardKeyboard(
         first,
         0,
@@ -418,10 +503,14 @@ export class BotUpdate {
     ctx.session.searchToken = this.generateSearchToken();
 
     const first = events[0];
-    const message = `🎯 <b>Подборка для вас</b>\n\nНайдено ${total} мероприятий по вашим предпочтениям:\n\n${formatEventCard(first)}`;
 
-    await ctx.replyWithHTML(
-      message,
+    // Send header message first
+    await ctx.reply(`🎯 <b>Подборка для вас</b>\n\nНайдено ${total} мероприятий по вашим предпочтениям:`, { parse_mode: 'HTML' });
+
+    // Then send event with photo
+    await this.sendEventWithPhoto(
+      ctx,
+      first,
       await this.buildCardKeyboard(
         first,
         0,
@@ -447,7 +536,7 @@ export class BotUpdate {
       if (!event) {
         await ctx.answerCbQuery('Мероприятие не найдено');
       } else {
-        await ctx.replyWithHTML(formatEventCard(event));
+        await this.sendEventWithPhoto(ctx, event);
         await ctx.answerCbQuery();
       }
       return;
@@ -1012,16 +1101,17 @@ export class BotUpdate {
         await ctx.answerCbQuery('Не удалось загрузить событие');
         return;
       }
-      await ctx.editMessageText(formatEventCard(e), {
-        parse_mode: 'HTML',
-        ...(await this.buildCardKeyboard(
+      await this.editEventMessage(
+        ctx,
+        e,
+        await this.buildCardKeyboard(
           e,
           nextIndex,
           total,
           ctx.session.searchToken ?? '',
           ctx
-        )),
-      });
+        )
+      );
       await ctx.answerCbQuery();
       return;
     }
@@ -1040,16 +1130,17 @@ export class BotUpdate {
       const e = events[idx];
       if (e) {
         ctx.session.view = 'card';
-        await ctx.editMessageText(formatEventCard(e), {
-          parse_mode: 'HTML',
-          ...(await this.buildCardKeyboard(
+        await this.editEventMessage(
+          ctx,
+          e,
+          await this.buildCardKeyboard(
             e,
             idx,
             total,
             ctx.session.searchToken ?? '',
             ctx
-          )),
-        });
+          )
+        );
       }
       await ctx.answerCbQuery();
       return;
@@ -1088,16 +1179,17 @@ export class BotUpdate {
         await ctx.answerCbQuery('Не удалось загрузить событие');
         return;
       }
-      await ctx.editMessageText(formatEventCard(e), {
-        parse_mode: 'HTML',
-        ...(await this.buildCardKeyboard(
+      await this.editEventMessage(
+        ctx,
+        e,
+        await this.buildCardKeyboard(
           e,
           idx,
           total,
           ctx.session.searchToken ?? '',
           ctx
-        )),
-      });
+        )
+      );
       await ctx.answerCbQuery();
       return;
     }
@@ -1168,16 +1260,23 @@ export class BotUpdate {
         ctx.session.view = 'card';
         ctx.session.searchToken = this.generateSearchToken();
         const first = events[0];
-        await ctx.editMessageText(formatEventCard(first), {
-          parse_mode: 'HTML',
-          ...(await this.buildCardKeyboard(
+
+        // Delete the menu message and send new event with photo
+        try {
+          await ctx.deleteMessage();
+        } catch {}
+
+        await this.sendEventWithPhoto(
+          ctx,
+          first,
+          await this.buildCardKeyboard(
             first,
             0,
             total,
             ctx.session.searchToken,
             ctx
-          )),
-        });
+          )
+        );
         await ctx.answerCbQuery();
         return;
       }
@@ -1209,16 +1308,23 @@ export class BotUpdate {
         ctx.session.view = 'card';
         ctx.session.searchToken = this.generateSearchToken();
         const first = events[0];
-        await ctx.editMessageText(formatEventCard(first), {
-          parse_mode: 'HTML',
-          ...(await this.buildCardKeyboard(
+
+        // Delete the menu message and send new event with photo
+        try {
+          await ctx.deleteMessage();
+        } catch {}
+
+        await this.sendEventWithPhoto(
+          ctx,
+          first,
+          await this.buildCardKeyboard(
             first,
             0,
             total,
             ctx.session.searchToken,
             ctx
-          )),
-        });
+          )
+        );
         await ctx.answerCbQuery();
         return;
       }
@@ -1377,8 +1483,9 @@ export class BotUpdate {
       ctx.session.view = 'card';
       ctx.session.searchToken = this.generateSearchToken();
       const first = events[0];
-      await ctx.replyWithHTML(
-        formatEventCard(first),
+      await this.sendEventWithPhoto(
+        ctx,
+        first,
         await this.buildCardKeyboard(
           first,
           0,
@@ -1425,8 +1532,9 @@ export class BotUpdate {
       ctx.session.view = 'card';
       ctx.session.searchToken = this.generateSearchToken();
       const first = events[0];
-      await ctx.replyWithHTML(
-        formatEventCard(first),
+      await this.sendEventWithPhoto(
+        ctx,
+        first,
         await this.buildCardKeyboard(
           first,
           0,
@@ -1456,8 +1564,9 @@ export class BotUpdate {
     ctx.session.view = 'card';
     ctx.session.searchToken = this.generateSearchToken();
     const first = events[0];
-    await ctx.replyWithHTML(
-      formatEventCard(first),
+    await this.sendEventWithPhoto(
+      ctx,
+      first,
       await this.buildCardKeyboard(
         first,
         0,
@@ -1579,11 +1688,27 @@ export class BotUpdate {
       Markup.button.callback('🔙 К карточке', `${t}view:card`),
     ];
 
-    await ctx.editMessageText(text, {
-      parse_mode: undefined,
-      reply_markup: {
-        inline_keyboard: [...numbersRows, navRow, toCardRow],
-      },
-    });
+    // Try to edit message text, if fails (e.g., previous was photo), delete and send new
+    try {
+      await ctx.editMessageText(text, {
+        parse_mode: undefined,
+        reply_markup: {
+          inline_keyboard: [...numbersRows, navRow, toCardRow],
+        },
+      });
+    } catch (error: any) {
+      // If can't edit (probably previous message was a photo), delete and send new
+      console.log('[renderList] Failed to edit message, deleting and sending new:', error.message);
+      try {
+        await ctx.deleteMessage();
+      } catch {}
+
+      await ctx.reply(text, {
+        parse_mode: undefined,
+        reply_markup: {
+          inline_keyboard: [...numbersRows, navRow, toCardRow],
+        },
+      });
+    }
   }
 }

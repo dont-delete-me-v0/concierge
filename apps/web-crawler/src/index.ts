@@ -128,6 +128,7 @@ async function runOnce(
             date_time_to: range.to,
             price_from: parsePriceFrom(row.price),
             source_url: absLink,
+            image_url: toAbsoluteUrl(row.image_url ?? row.image ?? row.imageUrl, config.url, config.source_base_url),
           };
         })
       );
@@ -175,6 +176,15 @@ async function runOnce(
             config.url,
             config.source_base_url
           );
+          const imageUrl = toAbsoluteUrl(row.image_url ?? row.image ?? row.imageUrl, config.url, config.source_base_url);
+
+          // Debug logging for image_url
+          if (imageUrl) {
+            console.log(`📸 Publishing event "${row.title}" with image_url: ${imageUrl}`);
+          } else {
+            console.log(`⚠️ Publishing event "${row.title}" WITHOUT image_url`);
+          }
+
           return {
             id: computeRowHash(row, fallbackKeys),
             title: row.title,
@@ -194,6 +204,7 @@ async function runOnce(
             date_time_to: range.to,
             price_from: parsePriceFrom(row.price),
             source_url: absLink,
+            image_url: imageUrl,
           };
         })
       );
@@ -359,6 +370,15 @@ async function runOnce(
           config.url,
           config.source_base_url
         );
+        const imageUrl = toAbsoluteUrl(row.image_url ?? row.image ?? row.imageUrl, config.url, config.source_base_url);
+
+        // Debug logging for image_url
+        if (imageUrl) {
+          console.log(`📸 Publishing event "${row.title}" with image_url: ${imageUrl}`);
+        } else {
+          console.log(`⚠️ Publishing event "${row.title}" WITHOUT image_url`);
+        }
+
         return {
           id: computeRowHash(row, uniqueKey),
           title: row.title,
@@ -378,6 +398,7 @@ async function runOnce(
           date_time_to: range.to,
           price_from: parsePriceFrom(row.price),
           source_url: absLink,
+          image_url: imageUrl,
         };
       })
     );

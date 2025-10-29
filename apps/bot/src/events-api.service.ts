@@ -12,6 +12,7 @@ export interface EventItem {
   date_time_to?: string | null;
   price_from?: number | null;
   source_url?: string | null;
+  imageUrl?: string | null; // Changed from image_url to imageUrl to match API response
 }
 
 export interface SearchParams {

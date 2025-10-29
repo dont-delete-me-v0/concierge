@@ -52,6 +52,7 @@ model Event {
   dateTimeTo   DateTime? @map("date_time_to") @db.Timestamptz
   priceFrom    Decimal?  @map("price_from") @db.Decimal(12, 2)
   sourceUrl    String?   @map("source_url")
+  imageUrl     String?   @map("image_url")
 
   category  Category?  @relation(fields: [categoryId], references: [id])
   venue     Venue?     @relation(fields: [venueId], references: [id])

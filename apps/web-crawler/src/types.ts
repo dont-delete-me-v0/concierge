@@ -36,6 +36,7 @@ export interface DetailsConfig {
   waitFor?: string | string[];
   maxConcurrency?: number;
   timeoutMs?: number;
+  delayBetweenRequests?: number;
 }
 
 export interface ScraperConfig {
@@ -436,6 +437,14 @@ export function validateConfig(input: unknown): ValidationResult {
       ) {
         errors.push(
           'details.timeoutMs must be a positive number when provided'
+        );
+      }
+      if (
+        d.delayBetweenRequests !== undefined &&
+        (typeof d.delayBetweenRequests !== 'number' || d.delayBetweenRequests < 0)
+      ) {
+        errors.push(
+          'details.delayBetweenRequests must be a non-negative number when provided'
         );
       }
       if (

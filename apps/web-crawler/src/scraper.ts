@@ -407,6 +407,7 @@ export class ConfigurableScraper {
       Math.min(detailsCfg.maxConcurrency ?? 3, 8)
     );
     const timeout = detailsCfg.timeoutMs ?? this.config.timeoutMs ?? 30000;
+    const delayBetweenRequests = detailsCfg.delayBetweenRequests ?? 0;
     const waitFor = Array.isArray(detailsCfg.waitFor)
       ? detailsCfg.waitFor
       : detailsCfg.waitFor
@@ -447,13 +448,19 @@ export class ConfigurableScraper {
                   return href;
                 }
               })();
-              await p.goto(absHref, { timeout, waitUntil: 'domcontentloaded' });
+              await p.goto(absHref, { timeout, waitUntil: 'commit' }).catch(async (err) => {
+                // If navigation fails, try without waitUntil
+                await p.goto(absHref, { timeout: Math.min(timeout, 10000) }).catch(() => undefined);
+              });
               for (const sel of waitFor)
                 await p
                   .waitForSelector(sel, { timeout })
                   .catch(() => undefined);
-              for (const s of detailsCfg.selectors)
-                await this.waitSelectorStable(p, s as SelectorConfig, timeout);
+
+              // Wait a bit for dynamic content to load (like sliders)
+              await p.waitForTimeout(2000);
+
+              // Don't wait for selector stability - just extract what's there
               details = await p.evaluate(selectors => {
                 /* eslint-disable no-undef */
                 const out = {} as Record<string, string | undefined>;
@@ -507,8 +514,25 @@ export class ConfigurableScraper {
                 return out;
                 /* eslint-enable no-undef */
               }, detailsCfg.selectors);
+
+              // Log extracted details for debugging
+              if (details && Object.keys(details).length > 0) {
+                console.log(`✓ Enriched item ${idx}: image_url=${details.image_url ? 'found' : 'not found'}, desc=${details.description ? 'found' : 'not found'}`);
+                if (details.image_url) {
+                  console.log(`  Image URL: ${details.image_url}`);
+                }
+              } else {
+                console.log(`✗ No details extracted for item ${idx}`);
+              }
             } finally {
-              await p.close().catch(() => undefined);
+              // Ensure page is closed properly
+              try {
+                if (p && !p.isClosed()) {
+                  await p.close();
+                }
+              } catch {
+                // Ignore close errors
+              }
             }
           } else if (detailsCfg.clickSelector) {
             // Click flow in same page via new tab opening
@@ -592,7 +616,14 @@ export class ConfigurableScraper {
                   /* eslint-enable no-undef */
                 }, detailsCfg.selectors);
               } finally {
-                await newPage.close().catch(() => undefined);
+                // Ensure page is closed properly
+                try {
+                  if (newPage && !newPage.isClosed()) {
+                    await newPage.close();
+                  }
+                } catch {
+                  // Ignore close errors
+                }
               }
             }
           }
@@ -605,6 +636,11 @@ export class ConfigurableScraper {
             `Failed to enrich item ${idx} (${href ?? 'no link'}): ${errorMsg}`
           );
           // Continue with next item
+        }
+
+        // Add delay between requests if configured
+        if (delayBetweenRequests > 0 && cursor < targets.length) {
+          await new Promise(resolve => setTimeout(resolve, delayBetweenRequests));
         }
       }
     };

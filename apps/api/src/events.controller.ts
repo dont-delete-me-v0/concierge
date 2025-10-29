@@ -21,6 +21,7 @@ export interface EventDto {
   date_time_to?: string | null; // ISO UTC
   price_from?: number | null;
   source_url?: string | null;
+  image_url?: string | null; // Input format (snake_case) - converted to imageUrl in response
 }
 
 @Controller('events')

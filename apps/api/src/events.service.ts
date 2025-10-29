@@ -31,6 +31,22 @@ export interface EventEntity {
   date_time_to?: string | null; // ISO UTC
   price_from?: number | null;
   source_url?: string | null;
+  image_url?: string | null;
+}
+
+// API response format (camelCase for bot compatibility)
+export interface EventResponse {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  category_id?: string | null;
+  venue_id?: string | null;
+  date_time?: string | null;
+  date_time_from?: string | null;
+  date_time_to?: string | null;
+  price_from?: number | null;
+  source_url?: string | null;
+  imageUrl?: string | null; // camelCase for bot
 }
 
 function computeId(input: string): string {
@@ -109,6 +125,7 @@ export class EventsService {
         dateTimeTo,
         priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
         sourceUrl: e.source_url ?? null,
+        imageUrl: e.image_url ?? null,
       },
       update: {
         title: e.title ?? null,
@@ -120,6 +137,7 @@ export class EventsService {
         dateTimeTo,
         priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
         sourceUrl: e.source_url ?? null,
+        imageUrl: e.image_url ?? null,
       },
     });
   }
@@ -155,6 +173,7 @@ export class EventsService {
             dateTimeTo,
             priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
             sourceUrl: e.source_url ?? null,
+            imageUrl: e.image_url ?? null,
           },
           update: {
             title: e.title ?? null,
@@ -166,13 +185,14 @@ export class EventsService {
             dateTimeTo,
             priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
             sourceUrl: e.source_url ?? null,
+            imageUrl: e.image_url ?? null,
           },
         });
       })
     );
   }
 
-  async findAll(): Promise<EventEntity[]> {
+  async findAll(): Promise<EventResponse[]> {
     const items = await this.prisma.event.findMany({
       orderBy: [
         { dateTime: { sort: 'asc', nulls: 'last' } },
@@ -180,7 +200,7 @@ export class EventsService {
       ],
     });
 
-    // Convert to EventEntity format with snake_case fields
+    // Convert to EventResponse format (camelCase imageUrl for bot)
     return items.map((item) => ({
       id: item.id,
       title: item.title,
@@ -192,17 +212,18 @@ export class EventsService {
       date_time_to: item.dateTimeTo?.toISOString() ?? null,
       price_from: item.priceFrom ? Number(item.priceFrom) : null,
       source_url: item.sourceUrl,
+      imageUrl: item.imageUrl,
     }));
   }
 
-  async findOne(id: string): Promise<EventEntity | null> {
+  async findOne(id: string): Promise<EventResponse | null> {
     const item = await this.prisma.event.findUnique({
       where: { id },
     });
 
     if (!item) return null;
 
-    // Convert to EventEntity format with snake_case fields
+    // Convert to EventResponse format (camelCase imageUrl for bot)
     return {
       id: item.id,
       title: item.title,
@@ -214,6 +235,7 @@ export class EventsService {
       date_time_to: item.dateTimeTo?.toISOString() ?? null,
       price_from: item.priceFrom ? Number(item.priceFrom) : null,
       source_url: item.sourceUrl,
+      imageUrl: item.imageUrl,
     };
   }
 
@@ -273,7 +295,7 @@ export class EventsService {
     priceTo?: number;
     limit: number;
     offset: number;
-  }): Promise<{ items: EventEntity[]; total: number }> {
+  }): Promise<{ items: EventResponse[]; total: number }> {
     console.log('[EventsService] searchPaginated input:', input);
 
     const where: Prisma.EventWhereInput = {};
@@ -408,8 +430,8 @@ export class EventsService {
 
     console.log('[EventsService] returned', items.length, 'items');
 
-    // Convert to EventEntity format
-    const eventEntities: EventEntity[] = items.map((item) => ({
+    // Convert to EventResponse format (camelCase imageUrl for bot)
+    const eventEntities: EventResponse[] = items.map((item) => ({
       id: item.id,
       title: item.title,
       description: item.description,
@@ -420,6 +442,7 @@ export class EventsService {
       date_time_to: item.dateTimeTo?.toISOString() ?? null,
       price_from: item.priceFrom ? Number(item.priceFrom) : null,
       source_url: item.sourceUrl,
+      imageUrl: item.imageUrl,
     }));
 
     return { items: eventEntities, total };

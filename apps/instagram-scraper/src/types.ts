@@ -38,6 +38,7 @@ export interface Event {
   date_time_to?: string;
   price_from?: number;
   source_url: string;
+  image_url?: string;
 }
 
 export interface ScraperConfig {

@@ -247,13 +247,7 @@ export class InstagramScraper {
           const aiResults = await this.aiExtractor.extractEventsBatch(chunk);
           console.log(`✅ Received AI response with ${aiResults.length} results`);
 
-          // CRITICAL FIX: Correct postIndex by adding chunk offset
-          const correctedResults = aiResults.map(result => ({
-            ...result,
-            postIndex: (result.postIndex ?? 0) + chunkOffset // Add offset to make index global
-          }));
-
-          allAiResults.push(...correctedResults);
+          allAiResults.push(...aiResults);
 
           // Small delay between chunks to avoid rate limiting (Groq only)
           if (chunkIdx < chunks.length - 1 && CHUNK_DELAY_MS > 0) {
@@ -263,39 +257,63 @@ export class InstagramScraper {
         } catch (error) {
           console.error(`❌ Chunk ${chunkIdx + 1} failed:`, error);
           console.log('⚠️  Continuing with next chunk...');
-          // Add placeholder results for failed chunk with correct indices
-          chunk.forEach((_, idx) => allAiResults.push({
-            isEvent: false,
-            confidence: 0,
-            postIndex: chunkOffset + idx
-          }));
+          // Add placeholder results for failed chunk
+          chunk.forEach(post => {
+            if (post?.id) {
+              allAiResults.push({
+                isEvent: false,
+                confidence: 0,
+                postId: post.id
+              });
+            }
+          });
         }
       }
 
       console.log(`\n✅ All chunks processed. Total results: ${allAiResults.length}`);
 
       try {
-        // Process AI results with proper post-to-event mapping using postIndex
-        console.log('\n📊 Processing AI results with corrected post mapping:');
+        // Process AI results with proper post-to-event mapping using postId (more reliable than index)
+        console.log('\n📊 Processing AI results with post ID mapping:');
 
-        // Group results by postIndex
-        const postEventsMap = new Map<number, any[]>();
+        // Create a map: postId → post for quick lookup
+        const postByIdMap = new Map<string, InstagramPost>();
+        validPosts.forEach(post => {
+          if (post.id) {
+            postByIdMap.set(post.id, post);
+          }
+        });
+
+        // Group results by postId
+        const postEventsMap = new Map<string, any[]>();
 
         for (const aiResult of allAiResults) {
-          const postIdx = aiResult.postIndex ?? 0;
-          if (!postEventsMap.has(postIdx)) {
-            postEventsMap.set(postIdx, []);
+          const postId = aiResult.postId;
+          if (!postId) {
+            console.warn(`⚠️ Event missing postId, skipping`);
+            continue;
           }
-          postEventsMap.get(postIdx)!.push(aiResult);
+
+          if (!postEventsMap.has(postId)) {
+            postEventsMap.set(postId, []);
+          }
+          postEventsMap.get(postId)!.push(aiResult);
         }
 
-        // Now process events with correct post assignments
-        for (let i = 0; i < validPosts.length; i++) {
-          const post = validPosts[i];
-          const postAiResults = postEventsMap.get(i) || [];
+        console.log(`📋 Mapped events to ${postEventsMap.size} unique posts`);
 
-          console.log(`\n  [Post ${i}] @${post.ownerUsername}:`);
+        // Now process events with correct post assignments using postId
+        for (const post of validPosts) {
+          if (!post.id) {
+            console.warn(`⚠️ Post missing ID, skipping`);
+            continue;
+          }
+
+          const postAiResults = postEventsMap.get(post.id) || [];
+
+          console.log(`\n  [Post ID: ${post.id.substring(0, 12)}...] @${post.ownerUsername}:`);
           console.log(`      Post URL: ${post.url}`);
+          console.log(`      Image URL: ${post.displayUrl ? post.displayUrl.substring(0, 60) + '...' : 'NO IMAGE'}`);
           let postEventsCount = 0;
 
           for (const aiResult of postAiResults) {
@@ -329,7 +347,10 @@ export class InstagramScraper {
                 processed++;
                 postEventsCount++;
                 console.log(`      ✅ Event #${postEventsCount}: "${event.title}" (confidence: ${aiResult.confidence.toFixed(2)})`);
-                console.log(`         URL: ${event.source_url} (from Redis postId: ${aiResult.postId})`);
+                console.log(`         Event ID: ${event.id.substring(0, 12)}...`);
+                console.log(`         Source URL: ${event.source_url}`);
+                console.log(`         Image URL: ${event.image_url ? event.image_url.substring(0, 60) + '...' : 'NO IMAGE'}`);
+                console.log(`         From Post ID: ${post.id.substring(0, 12)}...`);
               } else {
                 console.log(`      ⚠️ Event validation failed`);
                 skipped++;
@@ -347,6 +368,8 @@ export class InstagramScraper {
 
           if (postEventsCount === 0) {
             console.log(`      ℹ️ No valid events found in this post`);
+          } else {
+            console.log(`      📊 Total events from this post: ${postEventsCount}`);
           }
         }
 

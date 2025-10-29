@@ -21,8 +21,7 @@ export interface ExtractedEventAI {
   date_time?: string;
   date_time_from?: string;
   date_time_to?: string;
-  postIndex?: number; // Track which post this event came from (local to chunk)
-  postId?: string; // Instagram post ID for Redis lookup
+  postId: string; // Instagram post ID - REQUIRED for mapping events to posts
 }
 
 /**
@@ -203,10 +202,16 @@ CRITICAL:
       const allResults: ExtractedEventAI[] = [];
 
       for (const postData of events) {
-        const postIndex = postData.index ?? allResults.length;
-        const postEvents = postData.events || [];
+        const localIdx = postData.index ?? allResults.length;
+        const post = posts[localIdx];
 
-        console.log(`  [Post ${postIndex}]: ${postEvents.length} event(s) found`);
+        if (!post?.id) {
+          console.warn(`⚠️ Post at index ${localIdx} has no ID, skipping`);
+          continue;
+        }
+
+        const postEvents = postData.events || [];
+        console.log(`  [Post ID ${post.id.substring(0, 12)}...]: ${postEvents.length} event(s) found`);
 
         if (postEvents.length === 0) {
           // No events in this post
@@ -221,8 +226,7 @@ CRITICAL:
             date_time: undefined,
             date_time_from: undefined,
             date_time_to: undefined,
-            postIndex: postIndex, // Add post index
-            postId: posts[postIndex]?.id, // Add Instagram post ID for Redis lookup
+            postId: post.id,
           });
         } else {
           // Process each event from this post
@@ -238,8 +242,7 @@ CRITICAL:
               date_time: event.date_time || undefined,
               date_time_from: event.date_time_from || undefined,
               date_time_to: event.date_time_to || undefined,
-              postIndex: postIndex, // Add post index to track source
-              postId: posts[postIndex]?.id, // Add Instagram post ID for Redis lookup
+              postId: post.id,
             };
 
             // Log mapping for debugging
@@ -248,7 +251,7 @@ CRITICAL:
               console.log(`      venue: ${mapped.venue || 'NOT EXTRACTED'}`);
               console.log(`      category: ${mapped.category || 'NOT EXTRACTED'}`);
               console.log(`      date_time: ${mapped.date_time || 'NOT EXTRACTED'}`);
-              console.log(`      from post index: ${postIndex}, postId: ${mapped.postId}`);
+              console.log(`      from post ID: ${post.id.substring(0, 12)}... (@${post.ownerUsername})`);
             }
 
             allResults.push(mapped);
@@ -417,13 +420,14 @@ export class OpenAIExtractor implements AIProvider {
       } catch (error) {
         console.error(`❌ Chunk ${i + 1} failed:`, error);
         // Add empty results for failed chunk
-        for (let j = 0; j < chunk.length; j++) {
-          allResults.push({
-            isEvent: false,
-            confidence: 0,
-            postIndex: chunkStart + j,
-            postId: chunk[j]?.id,
-          });
+        for (const post of chunk) {
+          if (post?.id) {
+            allResults.push({
+              isEvent: false,
+              confidence: 0,
+              postId: post.id,
+            });
+          }
         }
         processedPosts += chunk.length;
       }
@@ -441,56 +445,74 @@ export class OpenAIExtractor implements AIProvider {
     currentDate: string,
     currentYear: number
   ): Promise<ExtractedEventAI[]> {
-    // Strict prompt - extract only what's explicitly stated
-    const systemPrompt = `Extract Ukrainian EVENT ANNOUNCEMENTS (афіші) from Instagram. Today: ${currentDate}
+    // Strict prompt - extract only event announcements (афіші)
+    const systemPrompt = `Extract EVENT ANNOUNCEMENTS (АФІШІ) from Ukrainian Instagram posts. Today: ${currentDate}
 
-CRITICAL RULES:
-1. ONLY АФІШІ (event announcements) - not reviews, not impressions
-2. Extract ONLY what's EXPLICITLY stated in text
-3. DON'T INVENT: if no price → null, no venue → null, no date → null
-4. Analyze ALL posts, return results for each
+🎯 DEFINITION: АФІША = announcement/poster advertising FUTURE event with call-to-action
 
-WHAT IS AN EVENT (афіша):
-✓ Event announcement with details: "Концерт 15 листопада", "Скоро тур", "Квитки у продажу"
-✓ Promotional posts: dates, ticket info, venue info
-✓ Can be with or without specific date ("Скоро концерт" = event if clearly future)
+✅ INCLUDE ONLY posts with ALL 3 criteria:
+1. **FUTURE date/time** (specific: "15 листопада 19:00" OR vague: "скоро", "незабаром")
+2. **Venue/location** (specific: "Палац Україна" OR location tag OR @venue_mention)
+3. **Call-to-action** ("квитки у продажу", "приглашаємо", "не пропустіть", "реєстрація", "lineup", "афіша")
 
-WHAT IS NOT AN EVENT (skip these):
-✗ Past events: "Концерт був чудовий", "Дякую за вечір", "Як це було"
-✗ Reviews/impressions: "відвідати концерт", "отримати задоволення", "я ваша прихильниця"
-✗ Concert photos without future event info
-✗ General recommendations without specific event details
-✗ Hashtag-only posts without context
+❌ EXCLUDE posts that are:
+- **Past events**: "був чудовий концерт", "дякую за вечір", "як це було", photos from past events
+- **Personal content**: селфі, їжа, пейзажі, повсякденні фото без анонсу події
+- **Reviews/impressions**: "відвідав концерт", "отримав задоволення", "рекомендую"
+- **No specific date**: general promotional content without timeframe
+- **No venue**: events without location information
+- **News without CTA**: загальні новини без призову прийти/купити квиток
 
-OUTPUT FORMAT (JSON object):
+🔍 KEY MARKERS OF АФІША:
+- Keywords: "приглашаємо", "афіша", "не пропустіть", "скоро", "анонс", "lineup", "квитки", "білети"
+- Date mentioned (specific or "скоро")
+- Venue name or location tag
+- Ticket/entrance info
+- Event title (artist/show name)
+
+📋 OUTPUT FORMAT (JSON):
 {"posts": [{"idx": 0, "evts": [{evt}, ...]}, {"idx": 1, "evts": []}, ...]}
+⚠️ CRITICAL: Return result for EVERY post. Array length MUST equal number of posts.
 
-EVENT FIELDS (evt) - ONLY if EXPLICITLY stated:
-- e: true (is event)
-- c: 0.0-1.0 (confidence: high if clear date, medium if vague "скоро")
-- t: "title" (artist/event name from text)
-- v: "venue" or null (ONLY if mentioned: location tag, @mention, or text)
-- cat: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Екскурсія|Інше
-- dt: ISO UTC or null (if date mentioned: convert Kyiv→UTC, if no date: null)
-- dtf/dtt: date range (ISO UTC) or null
-- p: price number or null (ONLY if stated: "500 грн", "від 300")
-- d: 2-5 sentences factual description from text
+📝 EVENT FIELDS (evt) - Extract with PRECISION:
+- e: true (is event/афіша)
+- c: 0.0-1.0 (confidence: 0.9 if clear date+venue, 0.7 if "скоро"+venue, 0.5 if vague)
+- t: "Event Title" (extract artist/show name, e.g., "Концерт MONATIK", "Вистава Лускунчик")
+- v: "Venue Name" or null (exact name: "Палац Україна", "Atlas", location tag, or @venue)
+- cat: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Кіно|Екскурсія|Інше
+- dt: ISO UTC or null (parse date if mentioned, null if only "скоро")
+- dtf/dtt: ISO UTC date range or null (if "з 10 по 15 листопада")
+- p: number or null (extract: "500 грн" → 500, "від 300" → 300, no price → null)
+- d: "Description" (2-4 sentences, factual summary from text, include key details)
 
-DATE PARSING (if date mentioned):
-- Kyiv UTC+2 winter, UTC+3 summer → UTC
-- "10 грудня 19:00" → "2025-12-10T17:00:00Z"
-- No year → ${currentYear}, no time → "00:00"
-- Past date → skip (not event)
-- No date ("скоро", "незабаром") → dt:null
+⏰ DATE PARSING RULES:
+- Kyiv timezone (UTC+2 winter, UTC+3 summer) → convert to UTC
+- "15 листопада 19:00" → "2025-11-15T17:00:00Z" (19:00 Kyiv = 17:00 UTC winter)
+- "20.12" → "2025-12-20T00:00:00Z" (no time = midnight)
+- Missing year → use ${currentYear}
+- Past dates → SKIP (not афіша)
+- Vague dates ("скоро", "незабаром", "в грудні") → dt:null but can be event if other criteria met
 
-EXAMPLES:
-✓ "Концерт Скрипки 15 листопада, квитки 500 грн" → АФІША: all fields filled
-✓ "Вистава 20.11 у Театрі Франка" → АФІША: v="Театр Франка", p=null, dt="2025-11-20T00:00:00Z"
-✓ "Скоро концерт Monatik! Квитки у продажу" → АФІША: t="Monatik", dt=null
-✗ "Концерт був чудовий!" → PAST EVENT (skip)
-✗ "Як отримати задоволення? Відвідати концерт" → REVIEW/RECOMMENDATION (skip)
-✗ "Я ваша прихильниця ❤️ #концерт" → IMPRESSION (skip)
-✗ "#kyivconcert" (only hashtags) → NO CONTEXT (skip)`;
+📌 EXAMPLES:
+
+✅ АФІША (INCLUDE):
+- "MONATIK | Концерт 15 листопада 19:00 | Палац Україна | Квитки: concert.ua"
+  → {e:true, c:0.95, t:"Концерт MONATIK", v:"Палац Україна", cat:"Концерт", dt:"2025-11-15T17:00:00Z", p:null, d:"Концерт MONATIK відбудеться 15 листопада о 19:00 у Палаці Україна. Квитки доступні на concert.ua."}
+
+- "Вистава 'Лускунчик' | 20.12 | Театр Франка | Від 300 грн | Не пропустіть!"
+  → {e:true, c:0.9, t:"Вистава Лускунчик", v:"Театр Франка", cat:"Театр", dt:"2025-12-20T00:00:00Z", p:300, d:"Вистава 'Лускунчик' у Театрі Франка 20 грудня. Квитки від 300 грн."}
+
+- "Скоро: Stand Up концерт у @atlasclub 🎤 Квитки вже у продажу!"
+  → {e:true, c:0.75, t:"Stand Up концерт", v:"Atlas", cat:"Стендап", dt:null, p:null, d:"Анонс stand up концерту в Atlas club. Квитки вже доступні для покупки."}
+
+❌ NOT АФІША (EXCLUDE → evts:[]):
+- "Концерт був неймовірний! Дякую всім 🎶❤️" → Past event review
+- "Як класно провести вечір? Відвідати концерт!" → General recommendation
+- "Я обожнюю цього артиста ❤️ #concert #music" → Personal impression
+- "[Фото з концерту без тексту про майбутні події]" → Past event photo
+- "#kyivconcert #music #vibes" → Hashtags only, no context
+- "Новий альбом вийшов! Слухайте зараз" → Music release, not event announcement`;
+
 
     // Prepare posts data (compact format with FULL captions)
     const postsData = posts.map((post, idx) => ({
@@ -500,23 +522,53 @@ EXAMPLES:
       l: post.locationName || '',
     }));
 
-    const userPrompt = `Analyze ${posts.length} posts. Extract ONLY АФІШІ (event announcements), skip reviews/impressions.
+    const userPrompt = `Analyze ALL ${posts.length} Instagram posts. Extract ONLY АФІШІ following strict criteria above.
+
+⚠️ MANDATORY: Response MUST have exactly ${posts.length} entries (indices 0 to ${posts.length - 1})
 
 POSTS DATA:
 ${JSON.stringify(postsData)}
 
-INSTRUCTIONS:
-- Read each post carefully
-- Identify if it's АФІША (event announcement with promotional intent)
-- SKIP: reviews ("як це було"), impressions ("отримати задоволення"), past events, hashtag-only posts
-- Extract ONLY information that's EXPLICITLY stated
-- If date not mentioned → dt:null
-- If price not mentioned → p:null
-- If venue not mentioned → v:null
-- If date exists: convert Kyiv time to UTC ISO format
-- Write factual descriptions based on text
+🔍 EXTRACTION ALGORITHM:
+For EACH post (i: 0 to ${posts.length - 1}):
 
-Return JSON: {"posts": [{"idx": 0, "evts": [{e:true, c:0.8, t:"...", v:null, cat:"...", dt:null, p:null, d:"..."}, ...]}, {"idx": 1, "evts": []}, ...]}`;
+STEP 1: Is this АФІША? Check ALL 3 criteria:
+  □ Has FUTURE date? (specific date OR "скоро"/"незабаром")
+  □ Has venue/location? (name, tag, or @mention)
+  □ Has call-to-action? ("квитки", "приглашаємо", "не пропустіть", etc.)
+
+  IF NO → {"idx": i, "evts": []}
+  IF YES → proceed to STEP 2
+
+STEP 2: Extract structured data with PRECISION:
+  - t (title): Extract artist/show name (e.g., "Концерт MONATIK", not just "MONATIK")
+  - v (venue): Extract EXACT venue name from text/location/mention
+  - cat: Classify: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Кіно|Екскурсія|Інше
+  - dt: Parse date → UTC ISO (e.g., "15.11 19:00" → "2025-11-15T17:00:00Z") OR null if "скоро"
+  - p: Extract number only (e.g., "500 грн" → 500, "від 300" → 300, none → null)
+  - d: Write 2-4 sentence factual summary from text (who, what, when, where)
+  - c: Confidence (0.9 if date+venue clear, 0.7 if "скоро"+venue, 0.5 if vague)
+
+STEP 3: Validate exclusions:
+  ✗ "був чудовий" → past event → evts:[]
+  ✗ selfi/food photos → personal content → evts:[]
+  ✗ "я обожнюю" → impression → evts:[]
+  ✗ no date/venue/CTA → not афіша → evts:[]
+
+📤 OUTPUT JSON FORMAT:
+{"posts": [
+  {"idx": 0, "evts": []},  // not афіша
+  {"idx": 1, "evts": [{e:true, c:0.9, t:"Концерт MONATIK", v:"Палац Україна", cat:"Концерт", dt:"2025-11-15T17:00:00Z", p:null, d:"Концерт MONATIK 15 листопада о 19:00 у Палаці Україна."}]},  // афіша
+  {"idx": 2, "evts": []},  // not афіша
+  ...
+  {"idx": ${posts.length - 1}, "evts": [...]}
+]}
+
+⚠️ CRITICAL REMINDERS:
+- EXACT ${posts.length} entries required
+- Extract ONLY explicitly stated information
+- Convert Kyiv time → UTC for dates
+- Factual descriptions only, no assumptions`;
 
     // Count tokens before sending (for logging)
     const inputTokens = this.countTokens(systemPrompt + userPrompt);
@@ -553,20 +605,40 @@ Return JSON: {"posts": [{"idx": 0, "evts": [{e:true, c:0.8, t:"...", v:null, cat
       const postsResults = Array.isArray(result) ? result : (result.posts || result.results || []);
       console.log(`✅ Received AI response with ${postsResults.length} post(s) analyzed`);
 
-      const allResults: ExtractedEventAI[] = [];
+      // Validate that we got results for all posts
+      if (postsResults.length !== posts.length) {
+        console.warn(`⚠️ WARNING: Expected ${posts.length} posts but got ${postsResults.length} results from AI`);
+        console.warn(`⚠️ This may cause events to be assigned to wrong posts!`);
+      }
+
+      // Build a map of local index → events
+      const postIndexToEvents = new Map<number, any[]>();
 
       for (const postData of postsResults) {
-        const postIndex = postData.idx ?? allResults.length;
-        const actualIndex = chunkOffset + postIndex; // Adjust for chunk offset
-        const events = postData.evts || [];
+        const localIdx = postData.idx;
+        if (localIdx !== undefined && localIdx >= 0 && localIdx < posts.length) {
+          postIndexToEvents.set(localIdx, postData.evts || []);
+        }
+      }
+
+      // Ensure we have results for ALL posts in this chunk
+      const allResults: ExtractedEventAI[] = [];
+
+      for (let i = 0; i < posts.length; i++) {
+        const post = posts[i];
+        if (!post?.id) {
+          console.warn(`⚠️ Post at index ${i} has no ID, skipping`);
+          continue;
+        }
+
+        const events = postIndexToEvents.get(i) || [];
 
         if (events.length === 0) {
           // No events in this post
           allResults.push({
             isEvent: false,
             confidence: 0,
-            postIndex: actualIndex,
-            postId: posts[postIndex]?.id,
+            postId: post.id,
           });
         } else {
           // Process each event from this post
@@ -582,14 +654,13 @@ Return JSON: {"posts": [{"idx": 0, "evts": [{e:true, c:0.8, t:"...", v:null, cat
               date_time: evt.dt,
               date_time_from: evt.dtf,
               date_time_to: evt.dtt,
-              postIndex: actualIndex,
-              postId: posts[postIndex]?.id,
+              postId: post.id,
             };
 
             if (mapped.isEvent) {
               const venueInfo = mapped.venue ? `venue: ${mapped.venue}` : 'venue: NOT FOUND';
               const priceInfo = mapped.price !== undefined ? `price: ${mapped.price}` : 'price: NOT FOUND';
-              console.log(`  ✅ Event: "${mapped.title}" from post ${actualIndex} (@${posts[postIndex]?.ownerUsername})`);
+              console.log(`  ✅ Event: "${mapped.title}" from post ID ${post.id.substring(0, 12)}... (@${post.ownerUsername})`);
               console.log(`      ${venueInfo}, ${priceInfo}`);
             }
 
@@ -598,6 +669,7 @@ Return JSON: {"posts": [{"idx": 0, "evts": [{e:true, c:0.8, t:"...", v:null, cat
         }
       }
 
+      console.log(`📊 Processed ${allResults.length} results from ${posts.length} posts`);
       return allResults;
     } catch (error) {
       if (error instanceof OpenAI.APIError) {
@@ -759,6 +831,7 @@ If not an event or past event, return {"isEvent": false}`;
         date_time: result.date_time,
         date_time_from: result.date_time_from,
         date_time_to: result.date_time_to,
+        postId: post.id,
       };
     } catch (error) {
       console.error('Claude extraction failed:', error);
@@ -882,6 +955,7 @@ If not an event or past event, return {"isEvent": false}`;
         date_time: result.date_time,
         date_time_from: result.date_time_from,
         date_time_to: result.date_time_to,
+        postId: post.id,
       };
     } catch (error) {
       console.error('Ollama extraction failed:', error);
@@ -913,6 +987,8 @@ export function aiEventToEvent(
   const id = crypto.createHash('sha256').update(idString).digest('hex');
 
   console.log(`      🔑 Generated ID from: "${idString}" -> ${id.substring(0, 12)}...`);
+  console.log(`      📷 Mapping to post: ID=${post.id?.substring(0, 12)}... @${post.ownerUsername}`);
+  console.log(`          Image URL: ${post.displayUrl ? post.displayUrl.substring(0, 80) + '...' : '❌ NO IMAGE'}`);
 
   const event: Event = {
     id,
@@ -927,15 +1003,18 @@ export function aiEventToEvent(
     date_time_to: aiData.date_time_to,
     price_from: aiData.price,
     source_url: post.url,
+    image_url: post.displayUrl, // IMPORTANT: Each event gets image from its source post
   };
 
   // Log final event structure
   console.log(`      📦 Final event object:`);
+  console.log(`          event_id: ${event.id.substring(0, 12)}...`);
   console.log(`          title: ${event.title}`);
   console.log(`          venue_name: ${event.venue_name || '❌ MISSING'}`);
   console.log(`          category_name: ${event.category_name || '❌ MISSING'}`);
   console.log(`          price_from: ${event.price_from || '❌ MISSING'}`);
   console.log(`          date_time: ${event.date_time || 'not set'}`);
+  console.log(`          image_url: ${event.image_url ? event.image_url.substring(0, 60) + '...' : '❌ NO IMAGE'}`);
 
   return event;
 }
