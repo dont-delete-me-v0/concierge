@@ -172,6 +172,8 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      CRAWLER_SCHEDULE: ${CRAWLER_SCHEDULE:-0 */3 * * *}
+      CONFIG_DIR: ${CONFIG_DIR:-crawl-configs}
       REDIS_URL: redis://redis:6379
       RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
       RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-events}
@@ -214,9 +216,13 @@ services:
       INSTAGRAM_HASHTAGS: ${INSTAGRAM_HASHTAGS}
       INSTAGRAM_LOCATIONS: ${INSTAGRAM_LOCATIONS}
       RESULTS_LIMIT: ${RESULTS_LIMIT:-200}
-      SAVE_OUTPUT: ${INSTAGRAM_SAVE_OUTPUT:-false}
-      OUTPUT_FILE: ${INSTAGRAM_OUTPUT_FILE:-instagram-posts.json}
-      SCRAPER_CRON: ${INSTAGRAM_SCRAPER_CRON:-0 */3 * * *}
+      SAVE_OUTPUT: ${SAVE_OUTPUT:-false}
+      OUTPUT_FILE: ${OUTPUT_FILE:-instagram-posts.json}
+      SCRAPER_CRON: ${SCRAPER_CRON:-0 */3 * * *}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: ${AI_MODEL}
+      MIN_AI_CONFIDENCE: ${MIN_AI_CONFIDENCE:-0.7}
       RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672
       RABBITMQ_QUEUE: ${RABBITMQ_QUEUE:-events}
       PUBLISHER_BATCH_SIZE: ${PUBLISHER_BATCH_SIZE:-50}

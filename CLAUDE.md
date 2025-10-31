@@ -99,12 +99,13 @@ make docker-dev-logs    # View all dev logs
 **Production (all services in Docker):**
 ```bash
 make docker-build       # Build all Docker images
-make docker-up          # Start all services
+make docker-up          # Start all services (crawlers start automatically)
 make docker-down        # Stop all services
 make docker-logs        # View logs
 make docker-restart     # Restart services
 make docker-ps          # Show container status
 ```
+*Note: Web crawler and Instagram scraper schedulers start automatically in production and run on configured schedules.*
 
 ### Linting & Formatting
 ```bash
@@ -183,6 +184,9 @@ make instagram-build      # Build Instagram scraper
 - **Main entry**: `src/index.ts` - reads config, orchestrates scraping, publishes to RabbitMQ
 - **Scraper engine**: `src/scraper.ts` - Playwright-based with proxy rotation and user-agent management
 - **Scheduler**: `src/scheduler.ts` - runs crawler on cron schedule (default: every 3 hours)
+  - **Production deployment**: Scheduler starts automatically in Docker container via `CMD ["node", "dist/scheduler.js"]`
+  - Runs immediately on container start, then on schedule (configured via `CRAWLER_SCHEDULE` env var)
+  - Automatically discovers and runs all configs in `crawl-configs/` directory
 - **Incremental crawling**: `src/incremental.ts` + `src/redisState.ts`
   - Uses Redis Set to store SHA256 hashes of uniqueKey fields
   - Falls back to JSON file storage for local development
@@ -358,7 +362,10 @@ make instagram-build      # Build Instagram scraper
 
 **AI-powered Instagram scraper** using Apify + LLM extraction:
 - **Main entry**: `src/index.ts` - scrapes Instagram posts and extracts event data using AI
-- **Scheduler**: `src/scheduler.ts` - runs scraper on cron schedule (configurable via INSTAGRAM_CRON)
+- **Scheduler**: `src/scheduler.ts` - runs scraper on cron schedule (configurable via SCRAPER_CRON)
+  - **Production deployment**: Scheduler starts automatically in Docker container via `CMD ["node", "dist/scheduler.js"]`
+  - Runs immediately on container start, then on schedule (default: every 3 hours)
+  - Uses CronJob with Europe/Kiev timezone
 - **Apify integration**: Uses Apify Instagram Profile Scraper actor to fetch posts
   - Supports scraping by accounts, hashtags, or locations
   - Configurable results limit per source
@@ -374,18 +381,18 @@ make instagram-build      # Build Instagram scraper
 
 **Key environment variables**:
 - `APIFY_TOKEN` - Apify API token (required)
-- `APIFY_ACTOR_ID` - Instagram scraper actor ID (default: apify/instagram-profile-scraper)
+- `APIFY_ACTOR_ID` - Instagram scraper actor ID (default: shu8hvrXbJbY3Eb9W)
 - `INSTAGRAM_ACCOUNTS` - Comma-separated list of Instagram usernames to scrape
 - `INSTAGRAM_HASHTAGS` - Comma-separated list of hashtags to scrape (optional)
 - `INSTAGRAM_LOCATIONS` - Comma-separated list of location IDs (optional)
-- `INSTAGRAM_RESULTS_LIMIT` - Max posts per source (default: 30)
-- `INSTAGRAM_CRON` - Cron schedule (default: 0 */3 * * * - every 3 hours)
-- `AI_PROVIDER` - AI provider: anthropic | openai | google (default: anthropic)
-- `ANTHROPIC_API_KEY` - Claude API key (if using anthropic provider)
-- `OPENAI_API_KEY` - OpenAI API key (if using openai provider)
-- `GOOGLE_API_KEY` - Google AI API key (if using google provider)
+- `RESULTS_LIMIT` - Max posts per source (default: 200)
+- `SAVE_OUTPUT` - Save output to JSON files (default: false)
+- `OUTPUT_FILE` - Output filename (default: instagram-posts.json)
+- `SCRAPER_CRON` - Cron schedule (default: 0 */3 * * * - every 3 hours)
+- `AI_PROVIDER` - AI provider: openai | anthropic | google | groq (default: openai)
+- `AI_API_KEY` - API key for the selected AI provider (required)
 - `AI_MODEL` - Model name (optional, uses provider default)
-- `MIN_CONFIDENCE` - Minimum confidence score for event extraction (default: 0.7)
+- `MIN_AI_CONFIDENCE` - Minimum confidence score for event extraction (default: 0.7)
 - `RABBITMQ_URL`, `RABBITMQ_QUEUE` - RabbitMQ connection (shares queue with web-crawler)
 - `TELEGRAM_TRACKER_TOKEN`, `TELEGRAM_CHAT_ID` - Telegram notifications
 
@@ -465,7 +472,7 @@ To add tests:
 
 ## Environment Variables
 
-**Required for local development** (see `env.example`):
+**Required for local development** (see `.env.example`):
 - `DATABASE_URL` - PostgreSQL connection string (e.g., postgresql://user:pass@localhost:5432/concierge)
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` - Database credentials (used to build DATABASE_URL)
 - `TELEGRAM_BOT_TOKEN` - Bot token from @BotFather
@@ -473,17 +480,30 @@ To add tests:
 - `TELEGRAM_CHAT_ID` - Chat ID for notifications (optional)
 
 **Optional configuration**:
-- `CRAWLER_SAVE_OUTPUT=true` - Save crawler results to JSON files
+- `CRAWLER_SCHEDULE=0 */3 * * *` - Cron schedule for web crawler (default: every 3 hours)
+- `CONFIG_DIR=crawl-configs` - Directory containing crawler configurations
+- `STATE_PREFIX=concert.ua` - Redis key prefix for crawler state
+- `CRAWLER_SAVE_OUTPUT=false` - Save crawler results to JSON files
+- `SOURCE_BASE_URL=https://concert.ua` - Base URL for the source website
 - `PUBLISHER_BATCH_SIZE=50` - RabbitMQ publisher batch size
 - `CONSUMER_BATCH_SIZE=100` - RabbitMQ consumer batch size
-- `STATE_PREFIX=concert.ua` - Redis key prefix for crawler state
 
 **Instagram scraper** (optional if using Instagram scraping):
-- `APIFY_TOKEN` - Apify API token
+- `APIFY_TOKEN` - Apify API token (required)
+- `APIFY_ACTOR_ID=shu8hvrXbJbY3Eb9W` - Instagram scraper actor ID
 - `INSTAGRAM_ACCOUNTS` - Comma-separated Instagram usernames
-- `AI_PROVIDER` - AI provider: anthropic | openai | google
-- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` or `GOOGLE_API_KEY` - AI API key
-- `MIN_CONFIDENCE=0.7` - Minimum confidence for event extraction
+- `INSTAGRAM_HASHTAGS` - Comma-separated hashtags (optional)
+- `INSTAGRAM_LOCATIONS` - Comma-separated location IDs (optional)
+- `RESULTS_LIMIT=200` - Max posts per source
+- `SAVE_OUTPUT=false` - Save output to JSON files
+- `OUTPUT_FILE=instagram-posts.json` - Output filename
+- `SCRAPER_CRON=0 */3 * * *` - Cron schedule for Instagram scraper
+
+**AI extraction** (for Instagram scraper):
+- `AI_PROVIDER=openai` - AI provider: openai | anthropic | google | groq
+- `AI_API_KEY` - API key for the selected provider
+- `AI_MODEL` - Model name (optional, uses provider default)
+- `MIN_AI_CONFIDENCE=0.7` - Minimum confidence for event extraction (0.0-1.0)
 
 ## Common Patterns
 
@@ -530,13 +550,17 @@ npx prisma db push  # Push schema changes directly to database without creating 
 - Always backup before schema changes: `make backup`
 
 ### Configuring Instagram scraper
-1. **Get Apify token**: Sign up at apify.com and get API token
-2. **Configure AI provider**: Set `AI_PROVIDER` (anthropic/openai/google/groq) and corresponding API key
+1. **Get Apify token**: Sign up at apify.com and get API token, add to `APIFY_TOKEN`
+2. **Configure AI provider**:
+   - Set `AI_PROVIDER` (openai/anthropic/google/groq)
+   - Add corresponding API key to `AI_API_KEY`
+   - Optionally set `AI_MODEL` (uses provider default if not set)
 3. **Set Instagram sources**: Add accounts to `INSTAGRAM_ACCOUNTS` env var (comma-separated)
 4. **Test locally**: `npm run dev --workspace=apps/instagram-scraper` or `make instagram-run`
-5. **Adjust confidence threshold**: Tune `MIN_CONFIDENCE` (0.0-1.0) based on extraction quality
-6. **For production**: Docker rebuilds and scheduler picks up new configuration
-7. **Category normalization**: AI extracts categories in any language, but they're normalized to Ukrainian standards via `normalizeCategory()`
+5. **Adjust confidence threshold**: Tune `MIN_AI_CONFIDENCE` (0.0-1.0) based on extraction quality
+6. **Configure scheduler**: Set `SCRAPER_CRON` for custom schedule (default: every 3 hours)
+7. **For production**: Run `make docker-build && make docker-up` - scheduler starts automatically
+8. **Category normalization**: AI extracts categories in any language, but they're normalized to Ukrainian standards via `normalizeCategory()`
 
 ## Architectural Patterns & Design Decisions
 

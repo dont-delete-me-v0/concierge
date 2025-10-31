@@ -3,7 +3,9 @@ dist/
 build/
 .next/
 *.log
-.env*
+.env
+.env.local
+.env.*.local
 coverage/
 .nyc_output/
 

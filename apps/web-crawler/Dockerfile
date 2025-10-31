@@ -72,5 +72,8 @@ RUN cd /app && npx playwright install chromium --with-deps
 ENV NODE_ENV=production
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/app/node_modules/.bin"
 
-# Keep container running (will be called by system cron)
-CMD ["tail", "-f", "/dev/null"]
+# Set working directory to web-crawler
+WORKDIR /app/apps/web-crawler
+
+# Run scheduler on container start
+CMD ["node", "dist/scheduler.js"]
