@@ -21,6 +21,9 @@ COPY packages/database ./packages/database
 # Generate Prisma client
 RUN npx prisma generate
 
+# Build packages/database first (required for instagram-scraper)
+RUN npm run build --workspace=@concierge/database
+
 # Build the application
 WORKDIR /app
 RUN npm run build --workspace=apps/instagram-scraper
