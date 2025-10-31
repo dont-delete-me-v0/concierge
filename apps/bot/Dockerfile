@@ -59,5 +59,5 @@ USER nestjs
 
 EXPOSE 3001
 
-CMD ["node", "-r", "tsconfig-paths/register", "apps/bot/dist/main.js"]
+CMD ["node", "apps/bot/dist/main.js"]
 
