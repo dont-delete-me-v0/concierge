@@ -2,7 +2,7 @@ import 'dotenv/config';
 import cron from 'node-cron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { main as runCrawler } from './index';
+import { runCrawler } from './index';
 
 const CRAWLER_SCHEDULE = process.env.CRAWLER_SCHEDULE || '0 */3 * * *'; // Every 3 hours by default
 const CONFIG_DIR = process.env.CONFIG_DIR || 'crawl-configs';
@@ -52,14 +52,8 @@ async function runScheduledCrawl(): Promise<void> {
     });
     console.log();
 
-    // Set the config path as command-line argument for the crawler
-    const originalArgs = process.argv.slice(2);
-    process.argv = ['node', 'scheduler.ts', configs.join(',')];
-
-    await runCrawler();
-
-    // Restore original args
-    process.argv = ['node', 'scheduler.ts', ...originalArgs];
+    // Pass configs as comma-separated string to runCrawler
+    await runCrawler(configs.join(','));
 
     console.log('\n✅ Scheduled crawler run completed successfully\n');
   } catch (err) {

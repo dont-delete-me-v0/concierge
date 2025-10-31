@@ -572,9 +572,13 @@ async function runOnce(
   }
 }
 
-async function main(): Promise<void> {
+/**
+ * Run crawler without exiting the process.
+ * Use this when calling from scheduler or other long-running processes.
+ */
+async function runCrawler(inputArg?: string): Promise<void> {
   try {
-    const inputArg = process.argv[2] ?? 'config.json';
+    const input = inputArg ?? process.argv[2] ?? 'config.json';
 
     async function resolveConfigPaths(input: string): Promise<string[]> {
       const tokens = input
@@ -604,11 +608,10 @@ async function main(): Promise<void> {
       return out;
     }
 
-    const configPaths = await resolveConfigPaths(inputArg);
+    const configPaths = await resolveConfigPaths(input);
     if (configPaths.length === 0) {
       console.error('No config paths resolved.');
-      process.exitCode = 1;
-      return;
+      throw new Error('No config paths resolved');
     }
 
     for (const configPath of configPaths) {
@@ -618,9 +621,7 @@ async function main(): Promise<void> {
       if (!validated.ok) {
         console.error('Invalid config:');
         for (const err of validated.errors) console.error(`- ${err}`);
-        // mark failure for this config and continue to next
-        process.exitCode = 1;
-        continue;
+        throw new Error(`Invalid config: ${validated.errors.join(', ')}`);
       }
       const cfg = validated.config;
       const retries = cfg.retries ?? 0;
@@ -657,8 +658,7 @@ async function main(): Promise<void> {
             console.error(
               `All ${retries + 1} attempts failed for ${configName}`
             );
-            process.exitCode = 1;
-            break;
+            throw err;
           }
 
           // Check if error is proxy/network related
@@ -685,13 +685,23 @@ async function main(): Promise<void> {
       // Always close scraper
       await scraper.close();
     }
+  } finally {
+    // Ensure all connections are closed
+    await closeRedis();
+  }
+}
+
+/**
+ * Main entry point for standalone execution.
+ * Exits the process after completion.
+ */
+async function main(): Promise<void> {
+  try {
+    await runCrawler();
   } catch (err) {
     console.error('Fatal error:', err);
     process.exitCode = 1;
   } finally {
-    // Ensure all connections are closed
-    // publisher is created per run and closed above
-    await closeRedis();
     process.exit(process.exitCode || 0);
   }
 }
@@ -714,4 +724,4 @@ if (require.main === module) {
   void main();
 }
 
-export { main };
+export { main, runCrawler };
