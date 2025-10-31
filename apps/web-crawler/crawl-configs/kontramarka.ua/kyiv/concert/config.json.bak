@@ -1,0 +1,166 @@
+{
+  "url": "https://kontramarka.ua/uk/concert",
+  "source_base_url": "https://kontramarka.ua",
+  "category_name": "concerts",
+  "state_prefix": "kontramarka.ua:kyiv:concert",
+  "waitFor": ".cat_item",
+  "headless": true,
+  "retries": 2,
+  "proxyFile": "crawl-configs/proxies.txt",
+  "proxyRotation": "random",
+  "retryOnStatusCodes": [
+    429,
+    503,
+    403
+  ],
+  "timeoutMs": 30000,
+  "pagination": {
+    "type": "infinite-scroll",
+    "scrollDelay": 3000,
+    "maxPages": 10
+  },
+  "selectors": [
+    {
+      "name": "title",
+      "selector": ".cat_item .block-info__title span[itemprop='name']",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "link",
+      "selector": ".cat_item .block-info__title",
+      "type": "attribute",
+      "attribute": "href",
+      "multiple": true
+    },
+    {
+      "name": "dateTime",
+      "selector": ".cat_item .dates",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "dateTimeIso",
+      "selector": ".cat_item meta[itemprop=\"startDate\"]",
+      "type": "attribute",
+      "attribute": "content",
+      "multiple": true
+    },
+    {
+      "name": "venue",
+      "selector": ".cat_item .block-info__loca",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "venueMeta",
+      "selector": ".cat_item div[itemprop='location'] meta[itemprop='name']",
+      "type": "attribute",
+      "attribute": "content",
+      "multiple": true
+    },
+    {
+      "name": "venueAddress",
+      "selector": ".cat_item div[itemprop='location'] meta[itemprop='address']",
+      "type": "attribute",
+      "attribute": "content",
+      "multiple": true
+    },
+    {
+      "name": "city",
+      "selector": ".cat_item .block-info__city",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "price",
+      "selector": ".cat_item .block-info__price",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "priceMin",
+      "selector": ".cat_item span[itemprop='lowPrice']",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "priceMax",
+      "selector": ".cat_item span[itemprop='highPrice']",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "image",
+      "selector": ".cat_item .cat_item__image",
+      "type": "attribute",
+      "attribute": "data-bg",
+      "multiple": true
+    }
+  ],
+  "userAgents": [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+  ],
+  "userAgentRotation": "random",
+  "incremental": {
+    "enabled": true,
+    "uniqueKey": [
+      "link"
+    ],
+    "trackChanges": true,
+    "updateExisting": false
+  },
+  "details": {
+    "link": "link",
+    "selectors": [
+      {
+        "name": "description",
+        "selector": ".afisha-about .content_cut",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "fullDateRange",
+        "selector": ".event-card__date .red-square",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "venue",
+        "selector": ".event-card__place",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "venueAddress",
+        "selector": ".event-card__address",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "price",
+        "selector": ".event-card__price .event-price",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "tags",
+        "selector": ".event-card__tags a",
+        "type": "text",
+        "multiple": true,
+        "transform": "trim"
+      }
+    ],
+    "maxConcurrency": 5,
+    "timeoutMs": 30000
+  }
+}

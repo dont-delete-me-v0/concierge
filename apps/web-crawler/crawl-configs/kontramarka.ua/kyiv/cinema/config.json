@@ -1,0 +1,123 @@
+{
+  "url": "https://kontramarka.ua/uk/cinema",
+  "source_base_url": "https://kontramarka.ua",
+  "category_name": "cinema",
+  "state_prefix": "kontramarka.ua:kyiv:cinema",
+  "waitFor": ".cat_item",
+  "headless": true,
+  "retries": 2,
+  "proxyFile": "crawl-configs/proxies.txt",
+  "proxyRotation": "random",
+  "retryOnStatusCodes": [
+    429,
+    503,
+    403
+  ],
+  "timeoutMs": 30000,
+  "pagination": {
+    "type": "infinite-scroll",
+    "scrollDelay": 3000,
+    "maxPages": 10
+  },
+  "selectors": [
+    {
+      "name": "title",
+      "selector": ".cat_item .block-info__title",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "link",
+      "selector": ".cat_item .block-info__title",
+      "type": "attribute",
+      "attribute": "href",
+      "multiple": true
+    },
+    {
+      "name": "description",
+      "selector": ".cat_item .block-info__description",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "price",
+      "selector": ".cat_item .block-info__price",
+      "type": "text",
+      "multiple": true,
+      "transform": "trim"
+    },
+    {
+      "name": "image",
+      "selector": ".cat_item .cat_item__image",
+      "type": "attribute",
+      "attribute": "style",
+      "multiple": true
+    }
+  ],
+  "userAgents": [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+  ],
+  "userAgentRotation": "random",
+  "incremental": {
+    "enabled": true,
+    "uniqueKey": [
+      "link"
+    ],
+    "trackChanges": true,
+    "updateExisting": false
+  },
+  "details": {
+    "link": "link",
+    "selectors": [
+      {
+        "name": "title",
+        "selector": ".mov__title span:first-child",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "description",
+        "selector": ".mov__text",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "genre",
+        "selector": ".mov__genre",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "dateTime",
+        "selector": ".spoiler:first-child .spoiler__head span",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "venue",
+        "selector": ".cinema:first-child .cinema__name .title",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "venueAddress",
+        "selector": ".cinema:first-child .cinema__name p",
+        "type": "text",
+        "transform": "trim"
+      },
+      {
+        "name": "image",
+        "selector": ".mov__poster",
+        "type": "attribute",
+        "attribute": "src",
+        "transform": "trim"
+      }
+    ],
+    "maxConcurrency": 5,
+    "timeoutMs": 30000
+  }
+}

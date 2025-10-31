@@ -1,5 +1,5 @@
 {
-  "url": "https://concert.ua/uk/catalog/kyiv/theater/date-from=2025-10-07&date-till=2025-10-17",
+  "url": "https://concert.ua/uk/catalog/kyiv/theater",
   "source_base_url": "https://concert.ua",
   "category_name": "theater",
   "state_prefix": "concert.ua:kyiv:theater",
@@ -24,21 +24,21 @@
   "selectors": [
     {
       "name": "title",
-      "selector": ".item-card-title",
+      "selector": ".item-card-title, .event__name",
       "type": "text",
       "multiple": true,
       "transform": "trim"
     },
     {
       "name": "price",
-      "selector": ".item-card .fs-16",
+      "selector": ".item-card .fs-16, .event__price",
       "type": "text",
       "multiple": true,
       "transform": "trim"
     },
     {
       "name": "link",
-      "selector": ".item-card",
+      "selector": ".item-card, .event-card",
       "type": "attribute",
       "attribute": "href",
       "multiple": true
@@ -51,18 +51,39 @@
       "multiple": true
     },
     {
+      "name": "eventIdAlt",
+      "selector": ".event-card",
+      "type": "attribute",
+      "attribute": "data-item-id",
+      "multiple": true
+    },
+    {
       "name": "dateTime",
-      "selector": ".item-card .fw-900.fs-14",
+      "selector": ".item-card .fw-900.fs-14, .event__date",
       "type": "text",
       "multiple": true,
       "transform": "trim"
     },
     {
+      "name": "dateTimeIso",
+      "selector": ".event-card",
+      "type": "attribute",
+      "attribute": "data-date-start",
+      "multiple": true
+    },
+    {
       "name": "venue",
-      "selector": ".item-card .color-secondary.fs-14",
+      "selector": ".item-card .color-secondary.fs-14, .event__place",
       "type": "text",
       "multiple": true,
       "transform": "trim"
+    },
+    {
+      "name": "categoryFromData",
+      "selector": ".event-card",
+      "type": "attribute",
+      "attribute": "data-item-categories",
+      "multiple": true
     }
   ],
   "userAgents": [
