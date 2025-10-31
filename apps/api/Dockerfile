@@ -62,5 +62,5 @@ USER nestjs
 
 EXPOSE 3000
 
-CMD ["node", "-r", "tsconfig-paths/register", "apps/api/dist/apps/api/src/main.js"]
+CMD ["node", "-r", "tsconfig-paths/register", "apps/api/dist/main.js"]
 
