@@ -1,6 +1,9 @@
 # Build stage
 FROM node:22-alpine AS builder
 
+# Install openssl for Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy workspace package files
@@ -19,6 +22,8 @@ COPY apps/instagram-scraper ./apps/instagram-scraper
 COPY packages/database ./packages/database
 
 # Generate Prisma client
+# Force npm to be used by Prisma
+ENV npm_config_user_agent=npm
 RUN npx prisma generate
 
 # Build packages/database first (required for instagram-scraper)
@@ -51,6 +56,8 @@ COPY packages/database ./packages/database
 RUN npm ci --workspace=apps/instagram-scraper --production
 
 # Generate Prisma client in production image
+# Force npm to be used by Prisma
+ENV npm_config_user_agent=npm
 RUN npx prisma generate
 
 # Copy built application

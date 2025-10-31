@@ -1,0 +1,49 @@
+# Clean Production Dockerfile for API (no symlinks)
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy ALL files for monorepo
+COPY . .
+
+# Force npm usage for Prisma
+ENV npm_config_user_agent=npm
+
+# Install all dependencies
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build packages and app
+RUN npm run build --workspace=@concierge/database && \
+    npm run build --workspace=apps/api
+
+# Production stage
+FROM node:18-alpine
+
+RUN apk add --no-cache wget
+
+WORKDIR /app
+
+# Copy entire monorepo structure (needed for npm workspaces)
+COPY . .
+
+# Force npm usage for Prisma
+ENV npm_config_user_agent=npm
+
+# Install only production dependencies
+RUN npm ci --omit=dev
+
+# Generate Prisma client in production
+RUN npx prisma generate
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001
+
+USER nestjs
+
+EXPOSE 3000
+
+CMD ["node", "apps/api/dist/main.js"]

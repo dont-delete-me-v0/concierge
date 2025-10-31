@@ -15,6 +15,8 @@ COPY prisma ./prisma
 RUN npm ci --workspace=apps/bot
 
 # Generate Prisma client
+# Force npm to be used by Prisma
+ENV npm_config_user_agent=npm
 RUN npx prisma generate
 
 # Copy source files
@@ -46,6 +48,8 @@ COPY packages/database ./packages/database
 RUN npm ci --workspace=apps/bot --omit=dev
 
 # Generate Prisma client
+# Force npm to be used by Prisma
+ENV npm_config_user_agent=npm
 RUN npx prisma generate
 
 # Create symlink for @concierge/database

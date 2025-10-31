@@ -1,5 +1,9 @@
 # Build stage
 FROM node:18-slim AS builder
+
+# Install openssl for Prisma
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy package files
@@ -14,6 +18,8 @@ COPY prisma ./prisma
 RUN npm ci --workspace=apps/web-crawler
 
 # Generate Prisma client (needed for database package)
+# Force npm to be used by Prisma
+ENV npm_config_user_agent=npm
 RUN npx prisma generate
 
 # Copy source files
