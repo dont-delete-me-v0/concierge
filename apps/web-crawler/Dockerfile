@@ -60,10 +60,6 @@ COPY --from=builder /app/node_modules ./node_modules
 
 # Copy web-crawler specific files
 COPY apps/web-crawler/crawl-configs ./apps/web-crawler/crawl-configs
-COPY apps/web-crawler/run-concert-crawlers.sh ./apps/web-crawler/run-concert-crawlers.sh
-
-# Give execution rights to the script
-RUN chmod +x /app/apps/web-crawler/run-concert-crawlers.sh
 
 # Install Playwright browsers (with Debian this works reliably)
 RUN cd /app && npx playwright install chromium --with-deps
