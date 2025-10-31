@@ -706,21 +706,21 @@ async function main(): Promise<void> {
   }
 }
 
-// Global error handlers
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exitCode = 1;
-});
-
-process.on('uncaughtException', error => {
-  console.error('Uncaught Exception:', error);
-  process.exitCode = 1;
-  // Give time for logs to flush
-  setTimeout(() => process.exit(1), 1000);
-});
-
 // Execute only when run directly
 if (require.main === module) {
+  // Register global error handlers only for standalone execution
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exitCode = 1;
+  });
+
+  process.on('uncaughtException', error => {
+    console.error('Uncaught Exception:', error);
+    process.exitCode = 1;
+    // Give time for logs to flush
+    setTimeout(() => process.exit(1), 1000);
+  });
+
   void main();
 }
 

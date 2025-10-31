@@ -1,109 +1,154 @@
 import 'dotenv/config';
-import cron from 'node-cron';
+import { CronJob } from 'cron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runCrawler } from './index';
 
-const CRAWLER_SCHEDULE = process.env.CRAWLER_SCHEDULE || '0 */3 * * *'; // Every 3 hours by default
-const CONFIG_DIR = process.env.CONFIG_DIR || 'crawl-configs';
+/**
+ * Scheduler for web crawler
+ * Runs the crawler on a cron schedule
+ */
+class WebCrawlerScheduler {
+  private job: CronJob | null = null;
+  private isRunning = false;
+  private configDir: string;
 
-async function findAllConfigs(dir: string): Promise<string[]> {
-  const configs: string[] = [];
-  const absDir = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
-
-  try {
-    const entries = await fs.readdir(absDir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(absDir, entry.name);
-
-      if (entry.isDirectory()) {
-        // Recursively search subdirectories
-        const subConfigs = await findAllConfigs(fullPath);
-        configs.push(...subConfigs);
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.json')) {
-        configs.push(fullPath);
-      }
-    }
-  } catch (err) {
-    console.error(`Failed to read directory ${absDir}:`, err);
+  constructor(private cronExpression: string, configDir?: string) {
+    this.configDir = configDir || process.env.CONFIG_DIR || 'crawl-configs';
+    console.log(`📅 Web crawler scheduler initialized with cron: ${cronExpression}`);
+    console.log(`📂 Config directory: ${this.configDir}`);
   }
 
-  return configs;
-}
-
-async function runScheduledCrawl(): Promise<void> {
-  console.log('\n=================================');
-  console.log('🕐 Scheduled crawler run started');
-  console.log(`📅 Time: ${new Date().toISOString()}`);
-  console.log('=================================\n');
-
-  try {
-    const configs = await findAllConfigs(CONFIG_DIR);
-
-    if (configs.length === 0) {
-      console.warn(`⚠️  No configs found in ${CONFIG_DIR}`);
+  /**
+   * Start the scheduler
+   */
+  start(): void {
+    if (this.job) {
+      console.warn('⚠️ Scheduler is already running');
       return;
     }
 
-    console.log(`📋 Found ${configs.length} config(s) to process:`);
-    configs.forEach((cfg, idx) => {
-      console.log(`  ${idx + 1}. ${path.relative(process.cwd(), cfg)}`);
-    });
-    console.log();
+    this.job = new CronJob(
+      this.cronExpression,
+      async () => {
+        await this.runCrawler();
+      },
+      null,
+      true,
+      'Europe/Kiev'
+    );
 
-    // Pass configs as comma-separated string to runCrawler
-    await runCrawler(configs.join(','));
+    console.log('✅ Web crawler scheduler started');
 
-    console.log('\n✅ Scheduled crawler run completed successfully\n');
-  } catch (err) {
-    console.error('\n❌ Scheduled crawler run failed:', err);
+    // Run immediately on start
+    this.runCrawler();
+  }
+
+  /**
+   * Stop the scheduler
+   */
+  stop(): void {
+    if (this.job) {
+      this.job.stop();
+      this.job = null;
+      console.log('⏹️ Web crawler scheduler stopped');
+    }
+  }
+
+  /**
+   * Find all config files recursively
+   */
+  private async findAllConfigs(dir: string): Promise<string[]> {
+    const configs: string[] = [];
+    const absDir = path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+
+    try {
+      const entries = await fs.readdir(absDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(absDir, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recursively search subdirectories
+          const subConfigs = await this.findAllConfigs(fullPath);
+          configs.push(...subConfigs);
+        } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.json')) {
+          configs.push(fullPath);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to read directory ${absDir}:`, err);
+    }
+
+    return configs;
+  }
+
+  /**
+   * Run the crawler
+   */
+  private async runCrawler(): Promise<void> {
+    if (this.isRunning) {
+      console.log('⏳ Crawler is already running, skipping this run');
+      return;
+    }
+
+    this.isRunning = true;
+    console.log('\n=================================');
+    console.log('🕐 Scheduled crawler run started');
+    console.log(`📅 Time: ${new Date().toISOString()}`);
+    console.log('=================================\n');
+
+    try {
+      const configs = await this.findAllConfigs(this.configDir);
+
+      if (configs.length === 0) {
+        console.warn(`⚠️  No configs found in ${this.configDir}`);
+        return;
+      }
+
+      console.log(`📋 Found ${configs.length} config(s) to process:`);
+      configs.forEach((cfg, idx) => {
+        console.log(`  ${idx + 1}. ${path.relative(process.cwd(), cfg)}`);
+      });
+      console.log();
+
+      // Pass configs as comma-separated string to runCrawler
+      await runCrawler(configs.join(','));
+
+      console.log('\n✅ Scheduled crawler run completed successfully\n');
+    } catch (error) {
+      console.error('\n❌ Scheduled crawler run failed:', error);
+    } finally {
+      this.isRunning = false;
+    }
   }
 }
 
-async function main(): Promise<void> {
-  console.log('🚀 Crawler Scheduler starting...');
-  console.log(`📅 Schedule: ${CRAWLER_SCHEDULE}`);
-  console.log(`📂 Config directory: ${CONFIG_DIR}`);
-  console.log(`🔍 Node environment: ${process.env.NODE_ENV || 'development'}`);
+// Main entry point
+async function main() {
+  // Default: run every 3 hours
+  const cronExpression = process.env.CRAWLER_SCHEDULE || '0 */3 * * *';
 
-  // Validate cron expression
-  if (!cron.validate(CRAWLER_SCHEDULE)) {
-    console.error(`❌ Invalid cron expression: ${CRAWLER_SCHEDULE}`);
-    process.exit(1);
-  }
+  const scheduler = new WebCrawlerScheduler(cronExpression);
+  scheduler.start();
 
-  // Run immediately on startup
-  console.log('\n🏃 Running initial crawl on startup...\n');
-  await runScheduledCrawl();
-
-  // Schedule recurring runs
-  console.log(`\n⏰ Scheduling recurring runs with pattern: ${CRAWLER_SCHEDULE}`);
-  const task = cron.schedule(CRAWLER_SCHEDULE, async () => {
-    await runScheduledCrawl();
-  });
-
-  console.log('✅ Scheduler is running. Press Ctrl+C to stop.\n');
-
-  // Keep the process alive
+  // Handle graceful shutdown
   process.on('SIGINT', () => {
-    console.log('\n\n🛑 Received SIGINT signal. Stopping scheduler...');
-    task.stop();
-    console.log('✅ Scheduler stopped gracefully');
+    console.log('\n🛑 Received SIGINT, stopping scheduler...');
+    scheduler.stop();
     process.exit(0);
   });
 
   process.on('SIGTERM', () => {
-    console.log('\n\n🛑 Received SIGTERM signal. Stopping scheduler...');
-    task.stop();
-    console.log('✅ Scheduler stopped gracefully');
+    console.log('\n🛑 Received SIGTERM, stopping scheduler...');
+    scheduler.stop();
     process.exit(0);
   });
 }
 
-// Execute only when run directly
 if (require.main === module) {
-  void main();
+  main().catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
 }
-
-export { main };
