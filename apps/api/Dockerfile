@@ -21,6 +21,9 @@ RUN npx prisma generate
 COPY apps/api ./apps/api
 COPY eslint.config.js .prettierrc.js ./
 
+# Build packages/database first (required for api)
+RUN npm run build --workspace=@concierge/database
+
 # Build the application
 RUN npm run build --workspace=apps/api
 

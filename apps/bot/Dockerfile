@@ -21,6 +21,9 @@ RUN npx prisma generate
 COPY apps/bot ./apps/bot
 COPY eslint.config.js .prettierrc.js ./
 
+# Build packages/database first (required for bot)
+RUN npm run build --workspace=@concierge/database
+
 # Build the application
 RUN npm run build --workspace=apps/bot
 
