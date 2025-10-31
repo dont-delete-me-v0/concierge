@@ -53,7 +53,7 @@ REQUIRED FIELDS:
 - isEvent: boolean (true if future event with specific date)
 - title: event/artist name
 - venue: location name (check username, caption, location tag, @mentions)
-- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
+- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Танці, Електронна музика, Новий рік, Творчий вечір, Кіно, Цирк, Музей, Бізнес, Клуби, Філармонія, Планетарій, Зоопарк, Інше
 - date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
 - date_time_from/to: for date ranges (also set date_time to start)
 - price: minimum ticket price (number)
@@ -479,7 +479,7 @@ export class OpenAIExtractor implements AIProvider {
 - c: 0.0-1.0 (confidence: 0.9 if clear date+venue, 0.7 if "скоро"+venue, 0.5 if vague)
 - t: "Event Title" (extract artist/show name, e.g., "Концерт MONATIK", "Вистава Лускунчик")
 - v: "Venue Name" or null (exact name: "Палац Україна", "Atlas", location tag, or @venue)
-- cat: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Кіно|Екскурсія|Інше
+- cat: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Екскурсія|Танці|Електронна музика|Новий рік|Творчий вечір|Кіно|Цирк|Музей|Бізнес|Клуби|Філармонія|Планетарій|Зоопарк|Інше
 - dt: ISO UTC or null (parse date if mentioned, null if only "скоро")
 - dtf/dtt: ISO UTC date range or null (if "з 10 по 15 листопада")
 - p: number or null (extract: "500 грн" → 500, "від 300" → 300, no price → null)
@@ -543,7 +543,7 @@ STEP 1: Is this АФІША? Check ALL 3 criteria:
 STEP 2: Extract structured data with PRECISION:
   - t (title): Extract artist/show name (e.g., "Концерт MONATIK", not just "MONATIK")
   - v (venue): Extract EXACT venue name from text/location/mention
-  - cat: Classify: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Кіно|Екскурсія|Інше
+  - cat: Classify: Концерт|Театр|Виставка|Фестиваль|Вечірка|Стендап|Дитяче|Спорт|Екскурсія|Танці|Електронна музика|Новий рік|Творчий вечір|Кіно|Цирк|Музей|Бізнес|Клуби|Філармонія|Планетарій|Зоопарк|Інше
   - dt: Parse date → UTC ISO (e.g., "15.11 19:00" → "2025-11-15T17:00:00Z") OR null if "скоро"
   - p: Extract number only (e.g., "500 грн" → 500, "від 300" → 300, none → null)
   - d: Write 2-4 sentence factual summary from text (who, what, when, where)
@@ -727,7 +727,7 @@ REQUIRED FIELDS:
 - isEvent: boolean (true if future event with specific date)
 - title: event/artist name
 - venue: location name (check username, caption, location tag, @mentions)
-- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
+- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Танці, Електронна музика, Новий рік, Творчий вечір, Кіно, Цирк, Музей, Бізнес, Клуби, Філармонія, Планетарій, Зоопарк, Інше
 - date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
 - date_time_from/to: for date ranges (also set date_time to start)
 - price: minimum ticket price (number)
@@ -868,7 +868,7 @@ REQUIRED FIELDS:
 - isEvent: boolean (true if future event with specific date)
 - title: event/artist name
 - venue: location name (check username, caption, location tag, @mentions)
-- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Інше
+- category: ONE of: Концерт, Театр, Виставка, Фестиваль, Вечірка, Стендап, Дитяче, Спорт, Екскурсія, Танці, Електронна музика, Новий рік, Творчий вечір, Кіно, Цирк, Музей, Бізнес, Клуби, Філармонія, Планетарій, Зоопарк, Інше
 - date_time: ISO 8601 UTC (e.g., "2025-12-10T17:00:00.000Z" for Dec 10, 19:00 Kyiv time)
 - date_time_from/to: for date ranges (also set date_time to start)
 - price: minimum ticket price (number)
