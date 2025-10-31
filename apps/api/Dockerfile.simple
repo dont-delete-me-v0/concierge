@@ -1,0 +1,36 @@
+# Simple working Dockerfile for API
+FROM node:18-alpine
+
+# Install required tools
+RUN apk add --no-cache wget openssl
+
+WORKDIR /app
+
+# Copy entire monorepo
+COPY . .
+
+# Install Prisma globally to avoid pnpm detection issues
+RUN npm install -g prisma
+
+# Install all dependencies (including dev for build)
+RUN npm ci
+
+# Generate Prisma client
+RUN prisma generate
+
+# Build packages and application
+RUN npm run build --workspace=@concierge/database && \
+    npm run build --workspace=apps/api
+
+# Clean dev dependencies
+RUN npm prune --production
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001
+
+USER nestjs
+
+EXPOSE 3000
+
+CMD ["node", "apps/api/dist/main.js"]

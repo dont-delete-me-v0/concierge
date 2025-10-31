@@ -1,86 +1,24 @@
-# Build stage
-FROM node:22-alpine AS builder
-
-# Install openssl for Prisma
-RUN apk add --no-cache openssl
-
-WORKDIR /app
-
-# Copy workspace package files
-COPY package*.json ./
-COPY apps/instagram-scraper/package*.json ./apps/instagram-scraper/
-COPY packages/database/package*.json ./packages/database/
-
-# Copy Prisma schema
-COPY prisma ./prisma
-
-# Install dependencies
-RUN npm ci --workspace=apps/instagram-scraper
-
-# Copy source files
-COPY apps/instagram-scraper ./apps/instagram-scraper
-COPY packages/database ./packages/database
-
-# Generate Prisma client
-# Force npm to be used by Prisma
-ENV npm_config_user_agent=npm
-RUN npx prisma generate
-
-# Build packages/database first (required for instagram-scraper)
-RUN npm run build --workspace=@concierge/database
-
-# Build the application
-WORKDIR /app
-RUN npm run build --workspace=apps/instagram-scraper
-
-# Production stage
+# Simple working Dockerfile for Instagram Scraper
 FROM node:22-alpine
 
-# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
 WORKDIR /app
 
-# Copy workspace package files
-COPY package*.json ./
-COPY apps/instagram-scraper/package*.json ./apps/instagram-scraper/
-COPY packages/database/package*.json ./packages/database/
+# Copy everything
+COPY . .
 
-# Copy Prisma schema (needed for runtime)
-COPY prisma ./prisma
+# Install all dependencies
+RUN npm ci
 
-# Copy packages (needed for @concierge/database)
-COPY packages/database ./packages/database
+# Generate Prisma client
+RUN cd /app && npx prisma generate
 
-# Install production dependencies only
-RUN npm ci --workspace=apps/instagram-scraper --production
-
-# Generate Prisma client in production image
-# Force npm to be used by Prisma
-ENV npm_config_user_agent=npm
-RUN npx prisma generate
-
-# Copy built application
-COPY --from=builder /app/apps/instagram-scraper/dist ./apps/instagram-scraper/dist
-
-# Copy built packages/database
-COPY --from=builder /app/packages/database/dist ./packages/database/dist
-
-# Fix @concierge/database resolution (AFTER all copy operations)
-RUN rm -rf /app/node_modules/@concierge/database && \
-    mkdir -p /app/node_modules/@concierge && \
-    ln -s /app/packages/database /app/node_modules/@concierge/database
+# Build database package and instagram-scraper
+RUN npm run build --workspace=@concierge/database
+RUN npm run build --workspace=apps/instagram-scraper
 
 WORKDIR /app/apps/instagram-scraper
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
-
-USER nodejs
-
-# Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
-
-# Default command runs the scheduler
 CMD ["node", "dist/scheduler.js"]
