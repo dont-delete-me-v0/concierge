@@ -8,6 +8,9 @@ COPY package*.json ./
 COPY apps/instagram-scraper/package*.json ./apps/instagram-scraper/
 COPY packages/database/package*.json ./packages/database/
 
+# Copy Prisma schema
+COPY prisma ./prisma
+
 # Install dependencies
 RUN npm ci --workspace=apps/instagram-scraper
 
@@ -16,7 +19,6 @@ COPY apps/instagram-scraper ./apps/instagram-scraper
 COPY packages/database ./packages/database
 
 # Generate Prisma client
-WORKDIR /app/packages/database
 RUN npx prisma generate
 
 # Build the application
@@ -36,19 +38,20 @@ COPY package*.json ./
 COPY apps/instagram-scraper/package*.json ./apps/instagram-scraper/
 COPY packages/database/package*.json ./packages/database/
 
+# Copy Prisma schema (needed for runtime)
+COPY prisma ./prisma
+
+# Copy packages (needed for @concierge/database)
+COPY packages/database ./packages/database
+
 # Install production dependencies only
 RUN npm ci --workspace=apps/instagram-scraper --production
 
+# Generate Prisma client in production image
+RUN npx prisma generate
+
 # Copy built application
 COPY --from=builder /app/apps/instagram-scraper/dist ./apps/instagram-scraper/dist
-COPY --from=builder /app/packages/database ./packages/database
-
-# Copy Prisma schema (needed for runtime)
-COPY packages/database/prisma ./packages/database/prisma
-
-# Generate Prisma client in production image
-WORKDIR /app/packages/database
-RUN npx prisma generate
 
 WORKDIR /app/apps/instagram-scraper
 
