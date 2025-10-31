@@ -28,7 +28,9 @@ CREATE TABLE IF NOT EXISTS public.events (
   date_time_from TIMESTAMPTZ,
   date_time_to TIMESTAMPTZ,
   price_from NUMERIC(12,2),
-  source_url TEXT
+  price_to NUMERIC(12,2),
+  source_url TEXT,
+  image_url TEXT
 );
 
 -- Helpful indexes
