@@ -9,9 +9,9 @@ export function mainKeyboard() {
   ]).resize();
 }
 
-export function formatEventCard(e: EventItem): string {
+export function formatEventCard(e: EventItem, showFullDescription = false): string {
   const title = e.title ?? 'Без названия';
-  const desc = buildSafeDescription(e.description);
+  const desc = buildSafeDescription(e.description, showFullDescription);
   const dateLine = formatDateRange(
     e.date_time_from ?? e.date_time,
     e.date_time_to
@@ -123,9 +123,23 @@ function stripTags(input: string): string {
     .trim();
 }
 
-function buildSafeDescription(raw?: string | null): string {
+function buildSafeDescription(raw?: string | null, showFull = false): string {
   if (!raw) return '';
   const plain = stripTags(raw);
   if (!plain) return '';
-  return escapeHtml(truncate(plain, 300));
+
+  const MAX_LENGTH = 300;
+  if (!showFull && plain.length > MAX_LENGTH) {
+    return escapeHtml(truncate(plain, MAX_LENGTH));
+  }
+
+  return escapeHtml(plain);
+}
+
+export function hasLongDescription(raw?: string | null): boolean {
+  if (!raw) return false;
+  const plain = stripTags(raw);
+  // Проверяем длину после stripTags или оригинальную длину (если много HTML)
+  // Также проверяем наличие многоточия в конце (может быть обрезано источником)
+  return plain.length > 300 || raw.length > 500 || plain.endsWith('…') || plain.endsWith('...');
 }

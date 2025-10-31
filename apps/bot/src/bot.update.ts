@@ -2,7 +2,7 @@ import { Ctx, Hears, InjectBot, On, Start, Update } from 'nestjs-telegraf';
 import type { Context, Scenes } from 'telegraf';
 import { Markup, Input } from 'telegraf';
 import { EventsApiService } from './events-api.service';
-import { formatEventCard, mainKeyboard, resolveEventUrl } from './keyboards';
+import { formatEventCard, mainKeyboard, resolveEventUrl, hasLongDescription } from './keyboards';
 import { UserService } from './user.service';
 
 export interface SessionData {
@@ -17,6 +17,8 @@ export interface SessionData {
   profileEditMode?: 'phone' | 'email' | 'price' | 'categories' | null; // Current profile edit mode
   tempCategorySelection?: string[]; // Temporary category selection for preferences
   categoriesList?: Array<{ id: string; name: string }>; // Categories list for profile editing
+  showFullDescriptions?: Record<string, boolean>; // Track which event descriptions are expanded
+  lastShownImageUrl?: string | null; // Track current message image URL
 }
 
 export type BotContext = Context &
@@ -42,7 +44,8 @@ export class BotUpdate {
     event: import('./events-api.service').EventItem,
     keyboard?: any
   ) {
-    const caption = formatEventCard(event);
+    const showFull = ctx.session.showFullDescriptions?.[event.id] ?? false;
+    const caption = formatEventCard(event, showFull);
 
     console.log('[sendEventWithPhoto] Event ID:', event.id);
     console.log('[sendEventWithPhoto] Has imageUrl:', !!event.imageUrl);
@@ -59,6 +62,8 @@ export class BotUpdate {
           ...keyboard,
         });
         console.log('[sendEventWithPhoto] Photo sent successfully!');
+        // Track the image URL for future edits
+        ctx.session.lastShownImageUrl = event.imageUrl;
         return;
       } catch (error) {
         console.error('[sendEventWithPhoto] Failed to send photo, falling back to text:', error);
@@ -70,25 +75,29 @@ export class BotUpdate {
     }
 
     // No image or photo failed - send as text
+    ctx.session.lastShownImageUrl = null;
     await ctx.replyWithHTML(caption, keyboard);
   }
 
   /**
-   * Edit event message - for navigation (prev/next)
-   * Note: Can't edit message media type, so we delete and resend with photo
+   * Edit event message - for navigation (prev/next) or description toggle
+   * Note: Can't change media type (photo <-> text) or image URL, so we delete and resend in those cases
    */
   private async editEventMessage(
     ctx: BotContext,
     event: import('./events-api.service').EventItem,
     keyboard?: any
   ) {
-    const caption = formatEventCard(event);
+    const showFull = ctx.session.showFullDescriptions?.[event.id] ?? false;
+    const caption = formatEventCard(event, showFull);
+    const lastImageUrl = ctx.session.lastShownImageUrl;
 
     console.log('[editEventMessage] Event ID:', event.id, 'Has imageUrl:', !!event.imageUrl);
+    console.log('[editEventMessage] Last shown imageUrl:', lastImageUrl ? lastImageUrl.substring(0, 50) + '...' : 'null');
 
-    // If event has image, always delete and resend to ensure photo is displayed
-    if (event.imageUrl) {
-      console.log('[editEventMessage] Event has image, deleting old message and sending new with photo');
+    // Check if image URL changed - if yes, need to delete and resend
+    if (event.imageUrl !== lastImageUrl) {
+      console.log('[editEventMessage] Image URL changed, deleting and resending');
       try {
         await ctx.deleteMessage();
       } catch {}
@@ -97,7 +106,30 @@ export class BotUpdate {
       return;
     }
 
-    // Try to edit text first (works if previous message was text)
+    // Image URL is the same (or both null) - can edit caption/text
+    if (event.imageUrl) {
+      // Current message has photo - edit caption
+      try {
+        console.log('[editEventMessage] Trying to edit message caption...');
+        await ctx.editMessageCaption(caption, {
+          parse_mode: 'HTML',
+          ...keyboard,
+        });
+        console.log('[editEventMessage] Caption edited successfully');
+        return;
+      } catch (error) {
+        // If editing caption fails, delete and resend
+        console.log('[editEventMessage] Failed to edit caption, deleting and resending');
+        try {
+          await ctx.deleteMessage();
+        } catch {}
+
+        await this.sendEventWithPhoto(ctx, event, keyboard);
+        return;
+      }
+    }
+
+    // No image - edit text
     try {
       console.log('[editEventMessage] Trying to edit message text...');
       await ctx.editMessageText(caption, {
@@ -107,7 +139,7 @@ export class BotUpdate {
       console.log('[editEventMessage] Message text edited successfully');
       return;
     } catch (error) {
-      // If editing fails, delete old message and send new one
+      // If editing fails, delete and resend
       console.log('[editEventMessage] Failed to edit text, deleting and resending');
       try {
         await ctx.deleteMessage();
@@ -1066,6 +1098,55 @@ export class BotUpdate {
       return;
     }
 
+    // Toggle description: show full or truncated
+    if (action === 'desc') {
+      const eventToken = args[0];
+      if (!eventToken) {
+        await ctx.answerCbQuery('Ошибка обработки');
+        return;
+      }
+
+      // Разрешаем короткий токен обратно в полный ID события
+      const eventId = this.eventsApi.resolveEventId(eventToken);
+      if (!eventId) {
+        await ctx.answerCbQuery('Событие не найдено');
+        return;
+      }
+
+      // Инициализируем объект если не существует
+      if (!ctx.session.showFullDescriptions) {
+        ctx.session.showFullDescriptions = {};
+      }
+
+      // Переключаем состояние
+      const currentState = ctx.session.showFullDescriptions[eventId] ?? false;
+      ctx.session.showFullDescriptions[eventId] = !currentState;
+
+      // Обновляем сообщение с новым состоянием
+      const events = ctx.session.events ?? [];
+      const idx = ctx.session.currentIndex ?? 0;
+      const total = ctx.session.totalEvents ?? events.length;
+      const e = events[idx];
+
+      if (e && e.id === eventId) {
+        await this.editEventMessage(
+          ctx,
+          e,
+          await this.buildCardKeyboard(
+            e,
+            idx,
+            total,
+            ctx.session.searchToken ?? '',
+            ctx
+          )
+        );
+        await ctx.answerCbQuery();
+      } else {
+        await ctx.answerCbQuery('Ошибка при обновлении');
+      }
+      return;
+    }
+
     // Navigation: prev/next with lazy loading
     if (action === 'nav' && (args[0] === 'p' || args[0] === 'n')) {
       const events = ctx.session.events ?? [];
@@ -1610,12 +1691,24 @@ export class BotUpdate {
           `${t}fav:add:${eventToken}`
         );
 
+    // Кнопка для показа/скрытия полного описания (только если описание длинное)
+    const showFull = ctx?.session.showFullDescriptions?.[e.id] ?? false;
+    const descriptionButton = hasLongDescription(e.description)
+      ? [
+          Markup.button.callback(
+            showFull ? '📕 Свернуть описание' : '📖 Показать полное описание',
+            `${t}desc:${eventToken}`
+          ),
+        ]
+      : [];
+
     const listRow = [Markup.button.callback('📋 Список', `${t}view:list`)];
     const abs = resolveEventUrl(e.source_url);
     const openRow = abs ? [Markup.button.url('🔗 Открыть', abs)] : [];
     return Markup.inlineKeyboard([
       navRow,
       [favButton],
+      ...(descriptionButton.length ? [descriptionButton] : []),
       listRow,
       ...(openRow.length ? [openRow] : []),
     ]);

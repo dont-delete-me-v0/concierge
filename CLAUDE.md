@@ -73,6 +73,7 @@ make dev-infra
 make dev-api            # Run API in dev mode (localhost:3000)
 make dev-bot            # Run bot in dev mode (localhost:3001)
 make dev-crawler        # Run crawler in dev mode
+make dev-instagram      # Run Instagram scraper in dev mode
 
 # 3. Stop infrastructure when done
 make dev-infra-down
@@ -198,7 +199,7 @@ make instagram-build      # Build Instagram scraper
   - Confirm channel mode: waits for broker acknowledgments
   - Backpressure handling: waits for drain events when queue full
   - Auto-reconnect with exponential delay on failures
-  - Message format: `{id: SHA256_hash, title, category_name, venue_name, date_time, date_time_from, date_time_to, price_from, source_url}`
+  - Message format: `{id: SHA256_hash, title, category_name, venue_name, date_time, date_time_from, date_time_to, price_from, source_url, image_url}`
 - **Date parsing**: `src/dateUtils.ts`
   - Parses Ukrainian date formats using Luxon: "dd місяця yyyy, dow HH:MM"
   - Handles date ranges: "dd.mm - dd.mm" → dateTimeFrom/dateTimeTo
@@ -213,6 +214,10 @@ make instagram-build      # Build Instagram scraper
 - **Detail page enrichment**: Concurrent worker pool (configurable 1-8 workers)
   - Link-based: opens detail URLs in new tabs
   - Click-based: simulates clicks to open detail panels
+  - **Image extraction**: Can extract event images via `image_url` selector in detail page config
+    - Supports multiple image selectors with fallbacks
+    - Extracts `src` attribute from `<img>` tags
+    - Images stored in Event.imageUrl field
 
 **Config structure**:
 - `url` - Page to scrape
@@ -411,7 +416,7 @@ make instagram-build      # Build Instagram scraper
   - `normalizeCategory()` function for consistent category resolution
   - Used by both web-crawler and Instagram scraper for unified categorization
 
-**Key Prisma commands**:
+**Key Prisma commands** (run from project root):
 ```bash
 npx prisma generate                    # Generate Prisma Client
 npx prisma migrate dev                 # Create and apply migrations (dev)
@@ -423,7 +428,7 @@ npx prisma db push                     # Push schema changes without migrations
 **Database models** (see `prisma/schema.prisma`):
 - **Category** - Event categories (id, name, icon, parentId with self-relation)
 - **Venue** - Event venues (id, name, address, lat, lng, phone, website)
-- **Event** - Events (id, title, description, categoryId, venueId, dateTime, dateTimeFrom, dateTimeTo, priceFrom, sourceUrl)
+- **Event** - Events (id, title, description, categoryId, venueId, dateTime, dateTimeFrom, dateTimeTo, priceFrom, priceTo, sourceUrl, imageUrl)
   - **Key indexes**:
     - `idx_events_category` on categoryId - for category filtering
     - `idx_events_venue` on venueId - for venue filtering
@@ -487,8 +492,9 @@ To add tests:
 2. Define selectors (must include at least: title, link, dateTime)
 3. Set `incremental.uniqueKey` to identify duplicate events
 4. Use English category names in config - they'll be auto-normalized to Ukrainian via `normalizeCategory()` from `packages/database/src/categories.ts`
-5. Test locally: `npm run dev --workspace=apps/web-crawler path/to/config.json`
-6. For production: Docker rebuilds and scheduler picks up new configs
+5. **Optional**: Add `image_url` selector in `details.selectors` to extract event images (stored in Event.imageUrl)
+6. Test locally: `npm run dev --workspace=apps/web-crawler path/to/config.json`
+7. For production: Docker rebuilds and scheduler picks up new configs
 
 ### Modifying bot commands
 - Add/update handlers in `apps/bot/src/bot.update.ts` using Telegraf decorators:
