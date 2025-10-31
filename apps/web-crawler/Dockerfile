@@ -7,12 +7,21 @@ COPY package*.json ./
 COPY apps/web-crawler/package*.json ./apps/web-crawler/
 COPY packages ./packages/
 
+# Copy Prisma schema (needed for database package)
+COPY prisma ./prisma
+
 # Install dependencies
 RUN npm ci --workspace=apps/web-crawler
+
+# Generate Prisma client (needed for database package)
+RUN npx prisma generate
 
 # Copy source files
 COPY apps/web-crawler ./apps/web-crawler
 COPY eslint.config.js .prettierrc.js ./
+
+# Build packages/database first (required for web-crawler)
+RUN npm run build --workspace=@concierge/database
 
 # Build the application
 RUN npm run build --workspace=apps/web-crawler
