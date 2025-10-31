@@ -1,0 +1,61 @@
+# Build stage
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy ALL package files first
+COPY package*.json ./
+COPY apps/api/package*.json ./apps/api/
+COPY packages/database/package*.json ./packages/database/
+COPY prisma ./prisma
+
+# Install ALL dependencies (including dev) for build
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy source files
+COPY . .
+
+# Build packages/database first
+RUN npm run build --workspace=@concierge/database
+
+# Build the API application
+RUN npm run build --workspace=apps/api
+
+# Production stage
+FROM node:18-alpine
+
+# Install wget for healthcheck
+RUN apk add --no-cache wget
+
+WORKDIR /app
+
+# Copy everything we need
+COPY package*.json ./
+COPY apps/api/package*.json ./apps/api/
+COPY packages/database/package*.json ./packages/database/
+COPY prisma ./prisma
+COPY packages/database ./packages/database
+
+# Install production dependencies
+RUN npm ci --omit=dev
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy built application
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001
+
+USER nestjs
+
+EXPOSE 3000
+
+# Simple direct node execution
+CMD ["node", "apps/api/dist/main.js"]
