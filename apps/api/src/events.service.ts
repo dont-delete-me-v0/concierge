@@ -30,6 +30,7 @@ export interface EventEntity {
   date_time_from?: string | null; // ISO UTC
   date_time_to?: string | null; // ISO UTC
   price_from?: number | null;
+  price_to?: number | null;
   source_url?: string | null;
   image_url?: string | null;
 }
@@ -45,6 +46,7 @@ export interface EventResponse {
   date_time_from?: string | null;
   date_time_to?: string | null;
   price_from?: number | null;
+  price_to?: number | null;
   source_url?: string | null;
   imageUrl?: string | null; // camelCase for bot
 }
@@ -124,6 +126,7 @@ export class EventsService {
         dateTimeFrom,
         dateTimeTo,
         priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+        priceTo: e.price_to ? new Prisma.Decimal(e.price_to) : null,
         sourceUrl: e.source_url ?? null,
         imageUrl: e.image_url ?? null,
       },
@@ -136,6 +139,7 @@ export class EventsService {
         dateTimeFrom,
         dateTimeTo,
         priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+        priceTo: e.price_to ? new Prisma.Decimal(e.price_to) : null,
         sourceUrl: e.source_url ?? null,
         imageUrl: e.image_url ?? null,
       },
@@ -172,6 +176,7 @@ export class EventsService {
             dateTimeFrom,
             dateTimeTo,
             priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+            priceTo: e.price_to ? new Prisma.Decimal(e.price_to) : null,
             sourceUrl: e.source_url ?? null,
             imageUrl: e.image_url ?? null,
           },
@@ -184,6 +189,7 @@ export class EventsService {
             dateTimeFrom,
             dateTimeTo,
             priceFrom: e.price_from ? new Prisma.Decimal(e.price_from) : null,
+            priceTo: e.price_to ? new Prisma.Decimal(e.price_to) : null,
             sourceUrl: e.source_url ?? null,
             imageUrl: e.image_url ?? null,
           },
@@ -211,6 +217,7 @@ export class EventsService {
       date_time_from: item.dateTimeFrom?.toISOString() ?? null,
       date_time_to: item.dateTimeTo?.toISOString() ?? null,
       price_from: item.priceFrom ? Number(item.priceFrom) : null,
+      price_to: item.priceTo ? Number(item.priceTo) : null,
       source_url: item.sourceUrl,
       imageUrl: item.imageUrl,
     }));
@@ -234,6 +241,7 @@ export class EventsService {
       date_time_from: item.dateTimeFrom?.toISOString() ?? null,
       date_time_to: item.dateTimeTo?.toISOString() ?? null,
       price_from: item.priceFrom ? Number(item.priceFrom) : null,
+      price_to: item.priceTo ? Number(item.priceTo) : null,
       source_url: item.sourceUrl,
       imageUrl: item.imageUrl,
     };
@@ -441,6 +449,7 @@ export class EventsService {
       date_time_from: item.dateTimeFrom?.toISOString() ?? null,
       date_time_to: item.dateTimeTo?.toISOString() ?? null,
       price_from: item.priceFrom ? Number(item.priceFrom) : null,
+      price_to: item.priceTo ? Number(item.priceTo) : null,
       source_url: item.sourceUrl,
       imageUrl: item.imageUrl,
     }));

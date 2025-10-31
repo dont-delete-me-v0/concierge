@@ -16,7 +16,15 @@ export function formatEventCard(e: EventItem): string {
     e.date_time_from ?? e.date_time,
     e.date_time_to
   );
-  const price = e.price_from != null ? `${e.price_from} грн` : '—';
+
+  // Format price range
+  let price = '—';
+  if (e.price_from != null && e.price_to != null && e.price_from !== e.price_to) {
+    price = `${e.price_from}-${e.price_to} грн`;
+  } else if (e.price_from != null) {
+    price = `від ${e.price_from} грн`;
+  }
+
   const url = resolveEventUrl(e.source_url);
   return [
     `<b>${escapeHtml(title)}</b>`,

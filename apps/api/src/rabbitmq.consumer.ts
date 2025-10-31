@@ -149,6 +149,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
         date_time_from: payload.date_time_from ?? null,
         date_time_to: payload.date_time_to ?? null,
         price_from: payload.price_from ?? null,
+        price_to: payload.price_to ?? null,
         source_url: normalizeUrl(payload.source_url ?? payload.link ?? null),
         image_url: normalizeUrl(payload.image_url ?? null),
       });
@@ -202,6 +203,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
           date_time_from: string | null;
           date_time_to: string | null;
           price_from: number | null;
+          price_to: number | null;
           source_url: string | null;
           image_url: string | null;
         }>;
@@ -230,9 +232,18 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
             typeof categoryName === 'string' &&
             categoryName.trim().length
           ) {
+            this.logger.debug(`🏷️  Creating/finding category: "${categoryName.trim()}" for event "${p.title}"`);
             categoryId = await this.events
               .upsertCategory({ name: categoryName.trim() })
-              .catch(() => null);
+              .catch((err) => {
+                this.logger.error(`❌ Failed to upsert category "${categoryName.trim()}": ${err.message}`);
+                return null;
+              });
+            if (categoryId) {
+              this.logger.debug(`✅ Category ID: ${categoryId}`);
+            } else {
+              this.logger.warn(`⚠️  Category ID is null for "${categoryName.trim()}"`);
+            }
           }
 
           // Debug logging for image_url
@@ -253,6 +264,7 @@ export class RabbitConsumer implements OnModuleInit, OnModuleDestroy {
             date_time_from: p.date_time_from ?? null,
             date_time_to: p.date_time_to ?? null,
             price_from: p.price_from ?? null,
+            price_to: p.price_to ?? null,
             source_url: p.source_url ?? p.link ?? null,
             image_url: imageUrl,
           });

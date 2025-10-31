@@ -133,7 +133,15 @@ export class DigestService implements OnModuleInit {
           const eventsList = events
             .map((event, idx) => {
               const title = event.title || 'Без названия';
-              const price = event.price_from ? `${event.price_from} грн` : '—';
+
+              // Format price range
+              let price = '—';
+              if (event.price_from != null && event.price_to != null && event.price_from !== event.price_to) {
+                price = `${event.price_from}-${event.price_to} грн`;
+              } else if (event.price_from != null) {
+                price = `від ${event.price_from} грн`;
+              }
+
               const dateFrom = event.date_time_from || event.date_time;
               const date = dateFrom
                 ? new Date(dateFrom).toLocaleDateString('ru-RU', {

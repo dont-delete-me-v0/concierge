@@ -12,7 +12,7 @@ import {
   loadIncrementalState,
   saveIncrementalState,
 } from './incremental';
-import { parsePriceFrom } from './priceUtils';
+import { parsePriceFrom, parsePriceRange } from './priceUtils';
 import { RabbitPublisher } from './rabbitmq';
 import { closeRedis, markSeen, updateMeta, wasSeen } from './redisState';
 import { ConfigurableScraper } from './scraper';
@@ -108,16 +108,19 @@ async function runOnce(
             config.url,
             config.source_base_url
           );
+          const rawCategory = row.category ?? row.category_name ?? config.category_name;
+          const normalizedCategory = normalizeCategory(rawCategory);
+          console.log(`🏷️  Event "${row.title}": raw category="${rawCategory}" → normalized="${normalizedCategory}"`);
+
+          const priceRange = parsePriceRange(row.price);
+          console.log(`💰 Event "${row.title}": raw price="${row.price}" → parsed from=${priceRange.from}, to=${priceRange.to}`);
+
           return {
             id: computeRowHash(row, fallbackKeys),
             title: row.title,
             description: row.description,
             // Names for resolution on consumer side
-            category_name: normalizeCategory(
-              row.category ??
-              row.category_name ??
-              config.category_name
-            ),
+            category_name: normalizedCategory,
             venue_name: row.venue ?? row.venue_name,
             category_id: null,
             venue_id: null,
@@ -126,7 +129,8 @@ async function runOnce(
               parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
             date_time_from: range.from,
             date_time_to: range.to,
-            price_from: parsePriceFrom(row.price),
+            price_from: priceRange.from,
+            price_to: priceRange.to,
             source_url: absLink,
             image_url: toAbsoluteUrl(row.image_url ?? row.image ?? row.imageUrl, config.url, config.source_base_url),
           };
@@ -168,9 +172,48 @@ async function runOnce(
       const publisher = new RabbitPublisher();
       await publisher.publishMany(
         rows.map(row => {
-          const range = parseDateRangeUaToUtcIso(
-            (row.dateTime ?? row.date_time ?? '').toString()
-          );
+          // Combine date and time if both exist
+          let rawDateTime = (row.dateTime ?? row.date_time ?? '').toString();
+          const timeStr = row.time ? row.time.toString().trim() : '';
+
+          // Extract time from format "19:00, пʼятниця" or "14:00 - 21:00"
+          if (timeStr && rawDateTime) {
+            const timeMatch = timeStr.match(/(\d{1,2}:\d{2})/);
+            if (timeMatch) {
+              const time = timeMatch[1];
+              rawDateTime = `${rawDateTime} ${time}`;
+            }
+          }
+
+          if (rawDateTime && !rawDateTime.includes('undefined')) {
+            console.log(`🗓️  Event "${row.title}" - raw dateTime: "${rawDateTime}"`);
+          }
+
+          // Use pre-parsed ISO dates if available, otherwise parse from text
+          let dateTimeFrom = row.date_time_from ? parseDateTimeUaToUtcIso(row.date_time_from.toString()) : undefined;
+          let dateTimeTo = row.date_time_to ? parseDateTimeUaToUtcIso(row.date_time_to.toString()) : undefined;
+
+          // Fallback: try to parse range from text field
+          if (!dateTimeFrom && !dateTimeTo && rawDateTime) {
+            const range = parseDateRangeUaToUtcIso(rawDateTime);
+            dateTimeFrom = range.from;
+            dateTimeTo = range.to;
+
+            if (dateTimeFrom || dateTimeTo) {
+              console.log(`  ✅ Parsed range: from=${dateTimeFrom}, to=${dateTimeTo}`);
+            } else {
+              console.log(`  ⚠️  Failed to parse date range from: "${rawDateTime}"`);
+            }
+          }
+
+          // Fallback: single date parsing
+          if (!dateTimeFrom && rawDateTime) {
+            dateTimeFrom = parseDateTimeUaToUtcIso(rawDateTime);
+            if (dateTimeFrom) {
+              console.log(`  ✅ Parsed single date: ${dateTimeFrom}`);
+            }
+          }
+
           const absLink = toAbsoluteUrl(
             row.link,
             config.url,
@@ -185,24 +228,26 @@ async function runOnce(
             console.log(`⚠️ Publishing event "${row.title}" WITHOUT image_url`);
           }
 
+          const rawCategory = row.category ?? row.category_name ?? config.category_name;
+          const normalizedCategory = normalizeCategory(rawCategory);
+          console.log(`🏷️  Event "${row.title}": raw category="${rawCategory}" → normalized="${normalizedCategory}"`);
+
+          const priceRange = parsePriceRange(row.price);
+          console.log(`💰 Event "${row.title}": raw price="${row.price}" → parsed from=${priceRange.from}, to=${priceRange.to}`);
+
           return {
             id: computeRowHash(row, fallbackKeys),
             title: row.title,
             description: row.description,
-            category_name: normalizeCategory(
-              row.category ??
-              row.category_name ??
-              config.category_name
-            ),
+            category_name: normalizedCategory,
             venue_name: row.venue ?? row.venue_name,
             category_id: null,
             venue_id: null,
-            date_time:
-              range.from ||
-              parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
-            date_time_from: range.from,
-            date_time_to: range.to,
-            price_from: parsePriceFrom(row.price),
+            date_time: dateTimeFrom,
+            date_time_from: dateTimeFrom,
+            date_time_to: dateTimeTo,
+            price_from: priceRange.from,
+            price_to: priceRange.to,
             source_url: absLink,
             image_url: imageUrl,
           };
@@ -362,9 +407,48 @@ async function runOnce(
     const publisher = new RabbitPublisher();
     await publisher.publishMany(
       outputRows.map(row => {
-        const range = parseDateRangeUaToUtcIso(
-          (row.dateTime ?? row.date_time ?? '').toString()
-        );
+        // Combine date and time if both exist
+        let rawDateTime = (row.dateTime ?? row.date_time ?? '').toString();
+        const timeStr = row.time ? row.time.toString().trim() : '';
+
+        // Extract time from format "19:00, пʼятниця" or "14:00 - 21:00"
+        if (timeStr && rawDateTime) {
+          const timeMatch = timeStr.match(/(\d{1,2}:\d{2})/);
+          if (timeMatch) {
+            const time = timeMatch[1];
+            rawDateTime = `${rawDateTime} ${time}`;
+          }
+        }
+
+        if (rawDateTime && !rawDateTime.includes('undefined')) {
+          console.log(`🗓️  Event "${row.title}" - raw dateTime: "${rawDateTime}"`);
+        }
+
+        // Use pre-parsed ISO dates if available, otherwise parse from text
+        let dateTimeFrom = row.date_time_from ? parseDateTimeUaToUtcIso(row.date_time_from.toString()) : undefined;
+        let dateTimeTo = row.date_time_to ? parseDateTimeUaToUtcIso(row.date_time_to.toString()) : undefined;
+
+        // Fallback: try to parse range from text field
+        if (!dateTimeFrom && !dateTimeTo && rawDateTime) {
+          const range = parseDateRangeUaToUtcIso(rawDateTime);
+          dateTimeFrom = range.from;
+          dateTimeTo = range.to;
+
+          if (dateTimeFrom || dateTimeTo) {
+            console.log(`  ✅ Parsed range: from=${dateTimeFrom}, to=${dateTimeTo}`);
+          } else {
+            console.log(`  ⚠️  Failed to parse date range from: "${rawDateTime}"`);
+          }
+        }
+
+        // Fallback: single date parsing
+        if (!dateTimeFrom && rawDateTime) {
+          dateTimeFrom = parseDateTimeUaToUtcIso(rawDateTime);
+          if (dateTimeFrom) {
+            console.log(`  ✅ Parsed single date: ${dateTimeFrom}`);
+          }
+        }
+
         const absLink = toAbsoluteUrl(
           row.link,
           config.url,
@@ -379,24 +463,26 @@ async function runOnce(
           console.log(`⚠️ Publishing event "${row.title}" WITHOUT image_url`);
         }
 
+        const rawCategory = row.category ?? row.category_name ?? config.category_name;
+        const normalizedCategory = normalizeCategory(rawCategory);
+        console.log(`🏷️  Event "${row.title}": raw category="${rawCategory}" → normalized="${normalizedCategory}"`);
+
+        const priceRange = parsePriceRange(row.price);
+        console.log(`💰 Event "${row.title}": raw price="${row.price}" → parsed from=${priceRange.from}, to=${priceRange.to}`);
+
         return {
           id: computeRowHash(row, uniqueKey),
           title: row.title,
           description: row.description,
-          category_name: normalizeCategory(
-            row.category ??
-            row.category_name ??
-            config.category_name
-          ),
+          category_name: normalizedCategory,
           venue_name: row.venue ?? row.venue_name,
           category_id: null,
           venue_id: null,
-          date_time:
-            range.from ||
-            parseDateTimeUaToUtcIso(row.dateTime ?? row.date_time ?? ''),
-          date_time_from: range.from,
-          date_time_to: range.to,
-          price_from: parsePriceFrom(row.price),
+          date_time: dateTimeFrom,
+          date_time_from: dateTimeFrom,
+          date_time_to: dateTimeTo,
+          price_from: priceRange.from,
+          price_to: priceRange.to,
           source_url: absLink,
           image_url: imageUrl,
         };
