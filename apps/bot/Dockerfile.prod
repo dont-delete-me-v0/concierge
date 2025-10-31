@@ -1,0 +1,59 @@
+# Production Dockerfile for Bot
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Copy all package files for workspaces
+COPY package*.json ./
+COPY apps/bot/package*.json ./apps/bot/
+COPY packages/database/package*.json ./packages/database/
+COPY prisma ./prisma
+
+# Install ALL dependencies (needed for build)
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy all source code
+COPY packages/database ./packages/database
+COPY apps/bot ./apps/bot
+
+# Build database package first
+RUN npm run build --workspace=@concierge/database
+
+# Build Bot
+RUN npm run build --workspace=apps/bot
+
+# Production stage
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY apps/bot/package*.json ./apps/bot/
+COPY packages/database/package*.json ./packages/database/
+COPY prisma ./prisma
+
+# Install production dependencies for all workspaces
+RUN npm ci --omit=dev
+
+# Generate Prisma client in production
+RUN npx prisma generate
+
+# Copy built code from builder
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
+COPY --from=builder /app/packages/database/src ./packages/database/src
+COPY --from=builder /app/apps/bot/dist ./apps/bot/dist
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001
+
+USER nestjs
+
+EXPOSE 3001
+
+# Direct node execution without tsconfig-paths
+CMD ["node", "apps/bot/dist/main.js"]

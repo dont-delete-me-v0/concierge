@@ -65,7 +65,13 @@ COPY packages ./packages/
 
 # Copy built application
 COPY --from=builder /app/apps/web-crawler/dist ./apps/web-crawler/dist
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
 COPY --from=builder /app/node_modules ./node_modules
+
+# Fix @concierge/database resolution (AFTER copying node_modules)
+RUN rm -rf /app/node_modules/@concierge/database && \
+    mkdir -p /app/node_modules/@concierge && \
+    ln -s /app/packages/database /app/node_modules/@concierge/database
 
 # Copy web-crawler specific files
 COPY apps/web-crawler/crawl-configs ./apps/web-crawler/crawl-configs

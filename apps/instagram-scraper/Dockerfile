@@ -56,6 +56,14 @@ RUN npx prisma generate
 # Copy built application
 COPY --from=builder /app/apps/instagram-scraper/dist ./apps/instagram-scraper/dist
 
+# Copy built packages/database
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
+
+# Fix @concierge/database resolution (AFTER all copy operations)
+RUN rm -rf /app/node_modules/@concierge/database && \
+    mkdir -p /app/node_modules/@concierge && \
+    ln -s /app/packages/database /app/node_modules/@concierge/database
+
 WORKDIR /app/apps/instagram-scraper
 
 # Create non-root user

@@ -1,0 +1,68 @@
+# Production Dockerfile for Web Crawler
+FROM node:18-slim AS builder
+
+WORKDIR /app
+
+# Copy all package files for workspaces
+COPY package*.json ./
+COPY apps/web-crawler/package*.json ./apps/web-crawler/
+COPY packages/database/package*.json ./packages/database/
+COPY prisma ./prisma
+
+# Install ALL dependencies (needed for build)
+RUN npm ci
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy all source code
+COPY packages/database ./packages/database
+COPY apps/web-crawler ./apps/web-crawler
+
+# Build database package first
+RUN npm run build --workspace=@concierge/database
+
+# Build Web Crawler
+RUN npm run build --workspace=apps/web-crawler
+
+# Production stage
+FROM node:18-slim
+
+# Install Playwright dependencies
+RUN apt-get update && apt-get install -y \
+    wget ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 libatk1.0-0 libatspi2.0-0 \
+    libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 libnspr4 libnss3 libwayland-client0 \
+    libxcomposite1 libxdamage1 libxfixes3 libxkbcommon0 libxrandr2 xdg-utils libu2f-udev libvulkan1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY apps/web-crawler/package*.json ./apps/web-crawler/
+COPY packages/database/package*.json ./packages/database/
+COPY prisma ./prisma
+
+# Install production dependencies for all workspaces
+RUN npm ci --omit=dev
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Copy built code from builder
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
+COPY --from=builder /app/packages/database/src ./packages/database/src
+COPY --from=builder /app/apps/web-crawler/dist ./apps/web-crawler/dist
+
+# Copy crawler configs
+COPY apps/web-crawler/crawl-configs ./apps/web-crawler/crawl-configs
+
+# Install Playwright browsers
+RUN npx playwright install chromium
+
+ENV NODE_ENV=production
+
+WORKDIR /app/apps/web-crawler
+
+# Run scheduler by default (which starts crawler periodically)
+CMD ["node", "dist/scheduler.js"]
