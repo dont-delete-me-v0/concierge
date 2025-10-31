@@ -48,8 +48,15 @@ RUN npm ci --workspace=apps/bot --omit=dev
 # Generate Prisma client
 RUN npx prisma generate
 
+# Create symlink for @concierge/database
+RUN mkdir -p /app/node_modules/@concierge && \
+    ln -s /app/packages/database /app/node_modules/@concierge/database
+
 # Copy built application from builder
 COPY --from=builder /app/apps/bot/dist ./apps/bot/dist
+
+# Copy built packages/database from builder
+COPY --from=builder /app/packages/database/dist ./packages/database/dist
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
