@@ -10,31 +10,31 @@ start-dev:
 # Docker development commands (all services in Docker with hot-reload)
 docker-dev-build:
 	@echo "Building Docker development images..."
-	@docker-compose -f docker-compose.dev.yml build
+	@docker compose -f docker-compose.dev.yml build
 
 docker-dev-up:
 	@echo "Starting all services in development mode..."
-	@docker-compose -f docker-compose.dev.yml up -d
+	@docker compose -f docker-compose.dev.yml up -d
 
 docker-dev-down:
 	@echo "Stopping all development services..."
-	@docker-compose -f docker-compose.dev.yml down
+	@docker compose -f docker-compose.dev.yml down
 
 docker-dev-restart:
 	@echo "Restarting all development services..."
-	@docker-compose -f docker-compose.dev.yml restart
+	@docker compose -f docker-compose.dev.yml restart
 
 docker-dev-logs:
-	@docker-compose -f docker-compose.dev.yml logs -f
+	@docker compose -f docker-compose.dev.yml logs -f
 
 # Development commands (only infrastructure in Docker, apps run locally)
 dev-infra:
 	@echo "Starting development infrastructure (DB, Redis, RabbitMQ)..."
-	@docker-compose -f docker-compose.dev.yml up -d db redis rabbitmq pgadmin
+	@docker compose -f docker-compose.dev.yml up -d db redis rabbitmq pgadmin
 
 dev-infra-down:
 	@echo "Stopping development infrastructure..."
-	@docker-compose -f docker-compose.dev.yml down
+	@docker compose -f docker-compose.dev.yml down
 
 dev-api:
 	@echo "Starting API in development mode..."
@@ -55,25 +55,25 @@ dev-instagram:
 # Docker commands (production)
 docker-build:
 	@echo "Building Docker images..."
-	@docker-compose build
+	@docker compose build
 
 docker-up:
 	@echo "Starting all services..."
-	@docker-compose up -d
+	@docker compose up -d
 
 docker-down:
 	@echo "Stopping all services..."
-	@docker-compose down
+	@docker compose down
 
 docker-restart:
 	@echo "Restarting all services..."
-	@docker-compose restart
+	@docker compose restart
 
 docker-logs:
-	@docker-compose logs -f
+	@docker compose logs -f
 
 docker-ps:
-	@docker-compose ps
+	@docker compose ps
 
 # Database backup commands
 backup:
